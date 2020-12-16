@@ -304,6 +304,8 @@ namespace OpenTelemetry.DynamicActivityBinding
 
         public void AddBaggage(string key, string value)
         {
+            var activity = new Vendored.System.Diagnostics.Activity("test");
+            activity.AddBaggage(key, value);
             if (_activityInstance == null)
             {
                 return;
