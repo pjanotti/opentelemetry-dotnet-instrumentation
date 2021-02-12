@@ -92,11 +92,11 @@ namespace Datadog.Trace.Configuration
         public const string TracesPipeTimeoutMs = "DD_TRACE_PIPE_TIMEOUT_MS";
 
         /// <summary>
-        /// Configuration key for the name of the pipe where the Tracer can send metrics.
+        /// Configuration key for the named pipe that DogStatsD binds to.
         /// Default value is <c>null</c>.
         /// </summary>
         /// <seealso cref="TracerSettings.MetricsPipeName"/>
-        public const string MetricsPipeName = "DD_DOGSTATSD_WINDOWS_PIPE_NAME";
+        public const string MetricsPipeName = "DD_DOGSTATSD_PIPE_NAME";
 
         /// <summary>
         /// Sibling setting for <see cref="AgentPort"/>.
@@ -225,6 +225,13 @@ namespace Datadog.Trace.Configuration
         public const string MaxLogFileSize = "DD_MAX_LOGFILE_SIZE";
 
         /// <summary>
+        /// Configuration key for setting the number of seconds between,
+        /// identical log messages, for Tracer log files.
+        /// Default value is 60s. Setting to 0 disables rate limiting.
+        /// </summary>
+        public const string LogRateLimit = "DD_TRACE_LOGGING_RATE";
+
+        /// <summary>
         /// Configuration key for setting the path to the .NET Tracer native log file.
         /// This also determines the output folder of the .NET Tracer managed log files.
         /// Overridden by <see cref="LogDirectory"/> if present.
@@ -264,14 +271,6 @@ namespace Datadog.Trace.Configuration
         /// Default value is <c>true</c> (enabled).
         /// </summary>
         public const string DiagnosticSourceEnabled = "DD_DIAGNOSTIC_SOURCE_ENABLED";
-
-        /// <summary>
-        /// Configuration key for the exporter to be used. The Tracer uses it to encode and
-        /// dispatch traces.
-        /// Default is <c>"DatadogAgent"</c>.
-        /// </summary>
-        /// <seealso cref="TracerSettings.Exporter"/>
-        public const string Exporter = "OTEL_EXPORTER";
 
         /// <summary>
         /// Configuration key for setting the API key, used by the Agent.
