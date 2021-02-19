@@ -2,7 +2,7 @@
 set -euxo pipefail
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
-VERSION=1.23.0
+VERSION=1.24.0
 
 mkdir -p $DIR/../../deploy/linux
 for target in integrations.json defaults.env LICENSE NOTICE ; do
