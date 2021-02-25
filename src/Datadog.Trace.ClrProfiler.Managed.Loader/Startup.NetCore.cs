@@ -54,7 +54,7 @@ namespace Datadog.Trace.ClrProfiler.Managed.Loader
             //    and invoke this resolve event. It must be loaded in a separate AssemblyLoadContext since the application will only
             //    load the originally referenced version
             if (assemblyName.Name.StartsWith("Datadog.Trace.ClrProfiler.Managed", StringComparison.OrdinalIgnoreCase)
-                && assemblyName.FullName.IndexOf("PublicKeyToken=def86d061d0d2eeb", StringComparison.OrdinalIgnoreCase) >= 0
+                && assemblyName.FullName.IndexOf("PublicKeyToken=34b8972644a12429", StringComparison.OrdinalIgnoreCase) >= 0
                 && File.Exists(path))
             {
                 StartupLogger.Debug("Loading {0} with Assembly.LoadFrom", path);
