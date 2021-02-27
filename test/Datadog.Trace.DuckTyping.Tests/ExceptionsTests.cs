@@ -9,6 +9,13 @@ namespace Datadog.Trace.DuckTyping.Tests
     public class ExceptionsTests
     {
         [Fact]
+        public void UseLessTest()
+        {
+            var intgrationInfo = new Configuration.IntegrationInfo("some-long-name");
+            Assert.True(intgrationInfo.UseLess > 0);
+        }
+
+        [Fact]
         public void PropertyCantBeReadException()
         {
             object target = new PropertyCantBeReadExceptionClass();
