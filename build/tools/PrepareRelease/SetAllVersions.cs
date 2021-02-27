@@ -238,7 +238,7 @@ namespace PrepareRelease
 
         private static string AssemblyString(string versionText)
         {
-            return $"Datadog.Trace.ClrProfiler.Managed, Version={versionText}.0, Culture=neutral, PublicKeyToken=34b8972644a12429";
+            return $"Datadog.Trace.ClrProfiler.Managed, Version={versionText}.0, Culture=neutral, PublicKeyToken=def86d061d0d2eeb";
         }
     }
 }
