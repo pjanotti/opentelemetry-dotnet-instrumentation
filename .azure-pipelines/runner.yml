@@ -11,7 +11,6 @@ trigger:
 
 variables:
   publishOutput: $(System.DefaultWorkingDirectory)/src/bin/managed-publish
-  OTEL_DOTNET_TRACER_MSBUILD:
 
 jobs:
 
@@ -68,7 +67,7 @@ jobs:
   steps:
 
   - task: UseDotNet@2
-    displayName: install dotnet core sdk 3.1
+    displayName: install dotnet core runtime 3.1
     inputs:
       packageType: sdk
       version: 5.0.x
