@@ -17,7 +17,8 @@ namespace Benchmarks.Trace
         private const int SpanCount = 1000;
 
         private static readonly ITraceWriter AgentWriter;
-        private static readonly Span[] EnrichedSpans;
+        private static readonly ArraySegment<Span> EnrichedSpans;
+
         static AgentWriterBenchmark()
         {
             var settings = TracerSettings.FromDefaultSources();
@@ -29,15 +30,17 @@ namespace Benchmarks.Trace
 
             AgentWriter = new AgentWriter(api, new NullMetrics(), automaticFlush: false);
 
-            EnrichedSpans = new Span[SpanCount];
+            var enrichedSpans = new Span[SpanCount];
             var now = DateTimeOffset.UtcNow;
 
             for (int i = 0; i < SpanCount; i++)
             {
-                EnrichedSpans[i] = new Span(new SpanContext(TraceId.CreateFromInt(i), (ulong)i, SamplingPriority.UserReject, "Benchmark", null), now);
-                EnrichedSpans[i].SetTag(Tags.Env, "Benchmark");
-                EnrichedSpans[i].SetMetric(Metrics.SamplingRuleDecision, 1.0);
+                enrichedSpans[i] = new Span(new SpanContext(TraceId.CreateFromInt(i), (ulong)i, SamplingPriority.UserReject, "Benchmark", null), now);
+                enrichedSpans[i].SetTag(Tags.Env, "Benchmark");
+                enrichedSpans[i].SetMetric(Metrics.SamplingRuleDecision, 1.0);
             }
+
+            EnrichedSpans = new ArraySegment<Span>(enrichedSpans);
 
             // Run benchmarks once to reduce noise
             new AgentWriterBenchmark().WriteAndFlushEnrichedTraces().GetAwaiter().GetResult();

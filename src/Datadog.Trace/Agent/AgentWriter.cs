@@ -105,7 +105,7 @@ namespace Datadog.Trace.Agent
             return _api.SendTracesAsync(EmptyPayload, 0);
         }
 
-        public void WriteTrace(Span[] trace)
+        public void WriteTrace(ArraySegment<Span> trace)
         {
             if (_serializationTask.IsCompleted)
             {
@@ -122,8 +122,11 @@ namespace Datadog.Trace.Agent
                 }
             }
 
-            _metrics.Increment(TracerMetricNames.Queue.EnqueuedTraces);
-            _metrics.Increment(TracerMetricNames.Queue.EnqueuedSpans, trace.Length);
+            if (_metrics != null)
+            {
+                _metrics.Increment(TracerMetricNames.Queue.EnqueuedTraces);
+                _metrics.Increment(TracerMetricNames.Queue.EnqueuedSpans, trace.Count);
+            }
         }
 
         public async Task FlushAndCloseAsync()
@@ -320,7 +323,7 @@ namespace Datadog.Trace.Agent
             }
         }
 
-        private void SerializeTrace(Span[] trace)
+        private void SerializeTrace(ArraySegment<Span> trace)
         {
             // Declaring as inline method because only safe to invoke in the context of SerializeTrace
             SpanBuffer SwapBuffers()
@@ -346,7 +349,7 @@ namespace Datadog.Trace.Agent
             }
 
             // Add the current keep rate to the root span
-            var rootSpan = trace[0].Context.TraceContext?.RootSpan;
+            var rootSpan = trace.Array[trace.Offset].Context.TraceContext?.RootSpan;
             if (rootSpan is not null)
             {
                 var currentKeepRate = _traceKeepRateCalculator.GetKeepRate();
@@ -389,8 +392,11 @@ namespace Datadog.Trace.Agent
             Log.Warning("Trace buffer is full. Dropping a trace.");
             _traceKeepRateCalculator.IncrementDrops(1);
 
-            _metrics.Increment(TracerMetricNames.Queue.DroppedTraces);
-            _metrics.Increment(TracerMetricNames.Queue.DroppedSpans, trace.Length);
+            if (_metrics != null)
+            {
+                _metrics.Increment(TracerMetricNames.Queue.DroppedTraces);
+                _metrics.Increment(TracerMetricNames.Queue.DroppedSpans, trace.Count);
+            }
         }
 
         private void SerializeTracesLoop()
@@ -415,7 +421,7 @@ namespace Datadog.Trace.Agent
                 {
                     while (_pendingTraces.TryDequeue(out var item))
                     {
-                        if (item.Trace == null)
+                        if (item.Callback != null)
                         {
                             // Found a watermark
                             item.Callback();
@@ -451,10 +457,10 @@ namespace Datadog.Trace.Agent
 
         private readonly struct WorkItem
         {
-            public readonly Span[] Trace;
+            public readonly ArraySegment<Span> Trace;
             public readonly Action Callback;
 
-            public WorkItem(Span[] trace)
+            public WorkItem(ArraySegment<Span> trace)
             {
                 Trace = trace;
                 Callback = null;
@@ -462,7 +468,7 @@ namespace Datadog.Trace.Agent
 
             public WorkItem(Action callback)
             {
-                Trace = null;
+                Trace = default;
                 Callback = callback;
             }
         }
