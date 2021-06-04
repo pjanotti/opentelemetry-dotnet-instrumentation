@@ -47,8 +47,7 @@ bool EnableInlining(bool defaultValue) {
 }
 
 bool IsCallTargetEnabled() {
-  ToBooleanWithDefault(GetEnvironmentValue(environment::calltarget_enabled),
-    true);
+  ToBooleanWithDefault(GetEnvironmentValue(environment::calltarget_enabled), true);
 }
 
 bool IsDebugEnabled() {
