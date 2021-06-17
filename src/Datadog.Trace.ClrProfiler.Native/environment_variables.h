@@ -1,7 +1,7 @@
 #ifndef OTEL_CLR_PROFILER_ENVIRONMENT_VARIABLES_H_
 #define OTEL_CLR_PROFILER_ENVIRONMENT_VARIABLES_H_
 
-#include "string.h"  // NOLINT
+#include "string.h" // NOLINT
 
 namespace trace {
 namespace environment {
@@ -104,7 +104,7 @@ const WSTRING clr_enable_inlining = WStr("OTEL_CLR_ENABLE_INLINING");
 // Sets whether to enable the CallTarget instrumentation mode
 const WSTRING calltarget_enabled = WStr("OTEL_TRACE_CALLTARGET_ENABLED");
 
-}  // namespace environment
-}  // namespace trace
+} // namespace environment
+} // namespace trace
 
 #endif
