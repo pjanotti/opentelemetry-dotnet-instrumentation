@@ -1,7 +1,9 @@
 trigger:
   branches:
     include:
-      - main
+      - master
+      - release/*
+      - hotfix/*
   paths:
     exclude:
       - docs/*
@@ -11,6 +13,7 @@ pr:
     include:
       - main
       - release/*
+      - hotfix/*
   paths:
     exclude:
       - docs/*
@@ -66,7 +69,7 @@ jobs:
       zipAfterPublish: false
       projects: src/Datadog.Trace.ClrProfiler.Managed/Datadog.Trace.ClrProfiler.Managed.csproj
       arguments: --configuration $(buildConfiguration) --framework netcoreapp3.1 --output $(publishOutput)/netcoreapp3.1
-      
+
   - task: DockerCompose@0
     displayName: docker-compose run Profiler
     inputs:
@@ -89,7 +92,7 @@ jobs:
         publishTargetFramework: netcoreapp3.1
       net5_0:
         publishTargetFramework: net5.0
-        
+
   variables:
     TestAllPackageVersions: true
 
@@ -369,7 +372,7 @@ jobs:
       containerregistrytype: Container Registry
       dockerComposeCommand: down
     condition: succeededOrFailed()
-    
+
 - job: Windows_IIS
   timeoutInMinutes: 100
   strategy:

@@ -1,7 +1,9 @@
 trigger:
   branches:
     include:
-      - main
+      - master
+      - release/*
+      - hotfix/*
       - refs/tags/*
     exclude:
       - refs/pull/*/head
@@ -224,7 +226,7 @@ jobs:
       arguments: /nowarn:netsdk1138
       projects: |
         src/Datadog.Trace.ClrProfiler.Managed.Loader/Datadog.Trace.ClrProfiler.Managed.Loader.csproj
-  
+
   - script: |
       sudo apt-get update
       sudo apt-get install -y llvm clang
@@ -235,6 +237,22 @@ jobs:
       CXX=clang++ CC=clang cmake .
       make
     displayName: build_profiler
+
+- job: linux_profiler_arm64
+  pool: Arm64
+  workspace:
+    clean: all
+
+  steps:
+
+  - task: DotNetCoreCLI@2
+    displayName: dotnet build
+    inputs:
+      command: build
+      configuration: $(buildConfiguration)
+      arguments: /nowarn:netsdk1138
+      projects: |
+        src/Datadog.Trace.ClrProfiler.Managed.Loader/Datadog.Trace.ClrProfiler.Managed.Loader.csproj
 
   - script: |
       cd ./src/Datadog.Trace.ClrProfiler.Native
