@@ -33,7 +33,7 @@ namespace PrepareRelease
         /// <summary>
         /// Gets a value indicating whether the current tracer version is a prerelease.
         /// </summary>
-        public bool IsPrerelease { get; } = false;
+        public bool IsPrerelease { get; } = true;
 
         public void Run()
         {
