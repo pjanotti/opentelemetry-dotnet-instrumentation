@@ -243,7 +243,7 @@ namespace Datadog.Trace.Tools.Runner
                     }))
                     {
                         childProcess.WaitForExit();
-                        return cancellationToken.IsCancellationRequested ? -1 : childProcess.ExitCode;
+                        return cancellationToken.IsCancellationRequested ? 1 : childProcess.ExitCode;
                     }
                 }
             }
@@ -252,7 +252,7 @@ namespace Datadog.Trace.Tools.Runner
                 Console.WriteLine(ex);
             }
 
-            return -1;
+            return 1;
         }
 
         public static string[] SplitArgs(string command, bool keepQuote = false)
