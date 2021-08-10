@@ -67,6 +67,10 @@ namespace Datadog.Trace
         public string ProcessArchitecture { get; }
 
         public string TargetFramework { get; }
+        public static bool IsNet5()
+        {
+            return Environment.Version.Major >= 5;
+        }
 
         public override string ToString()
         {

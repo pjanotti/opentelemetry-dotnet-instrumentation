@@ -50,6 +50,18 @@ namespace Datadog.Trace.Configuration
         public const string TraceEnabled = "OTEL_TRACE_ENABLED";
 
         /// <summary>
+        /// Configuration key for enabling or disabling the AppSec.
+        /// Default is value is false (disabled).
+        /// </summary>
+        public const string AppSecEnabled = "OTEL_APPSEC_ENABLED";
+
+        /// <summary>
+        /// Configuration key for enabling or disabling blocking in AppSec.
+        /// Default is value is false (disabled).
+        /// </summary>
+        public const string AppSecBlockingEnabled = "OTEL_APPSEC_BLOCKING_ENABLED";
+
+        /// <summary>
         /// Configuration key for enabling or disabling the Tracer's debug mode.
         /// Default is value is false (disabled).
         /// </summary>

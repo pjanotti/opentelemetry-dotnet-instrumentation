@@ -19,7 +19,8 @@
     <DefineSolutionProperties>false</DefineSolutionProperties>
     <OutputName>opentelemetry-dotnet-autoinstrumentation-0.0.1-$(Platform)</OutputName>
     <TracerHomeDirectory Condition="'$(TracerHomeDirectory)' == ''">$(MSBuildThisFileDirectory)..\bin\windows-tracer-home</TracerHomeDirectory>
-    <DefineConstants>InstallerVersion=0.0.1;TracerHomeDirectory=$(TracerHomeDirectory)</DefineConstants>
+    <DefineConstants>InstallerVersion=0.0.1;TracerHomeDirectory=$(TracerHomeDirectory);LibSqreenDirectory=$(LibSqreenDirectory)</DefineConstants>
+    <LibSqreenDirectory Condition="'$(LibSqreenDirectory)' == ''">$(LibSqreenDirectory)..\..\packages\libsqreen.1.1.2.3</LibSqreenDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DefineConstants>$(DefineConstants);Debug</DefineConstants>
