@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using Datadog.Trace.ClrProfiler.Emit;
@@ -18,6 +19,8 @@ namespace Datadog.Trace.ClrProfiler.Integrations
     /// <summary>
     /// Tracing integration for RabbitMQ.Client
     /// </summary>
+    [Browsable(false)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static class RabbitMQIntegration
     {
         internal const string IntegrationName = nameof(IntegrationIds.RabbitMQ);

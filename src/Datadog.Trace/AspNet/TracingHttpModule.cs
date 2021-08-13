@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Web;
 using Datadog.Trace.AppSec;
@@ -25,6 +26,8 @@ namespace Datadog.Trace.AspNet
     /// <summary>
     ///     IHttpModule used to trace within an ASP.NET HttpApplication request
     /// </summary>
+    [Browsable(false)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public class TracingHttpModule : IHttpModule
     {
         internal static readonly IntegrationInfo IntegrationId = IntegrationRegistry.GetIntegrationInfo(nameof(IntegrationIds.AspNet));
