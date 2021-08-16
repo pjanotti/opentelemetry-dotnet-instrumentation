@@ -63,7 +63,7 @@ const WSTRING skip_assemblies[]{WStr("mscorlib"),
                                 WStr("Anonymously Hosted DynamicMethods Assembly"),
                                 WStr("ISymWrapper")};
 
-inline WSTRING managed_profiler_full_assembly_version =
+const WSTRING managed_profiler_full_assembly_version =
     WStr("OpenTelemetry.AutoInstrumentation, Version=0.0.1.0, Culture=neutral, PublicKeyToken=34b8972644a12429");
 
 const WSTRING managed_profiler_name = WStr("OpenTelemetry.AutoInstrumentation");
