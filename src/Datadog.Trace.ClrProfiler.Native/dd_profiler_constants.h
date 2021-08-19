@@ -69,6 +69,7 @@ const WSTRING managed_profiler_full_assembly_version =
 const WSTRING managed_profiler_name = WStr("OpenTelemetry.AutoInstrumentation");
 
 const WSTRING nonwindows_nativemethods_type = WStr("Datadog.Trace.ClrProfiler.NativeMethods+NonWindows");
+const WSTRING appsec_nonwindows_nativemethods_type = WStr("Datadog.Trace.AppSec.Waf.NativeBindings.NativeLibrary+NonWindows");
 
 const WSTRING calltarget_modification_action = WStr("CallTargetModification");
 
