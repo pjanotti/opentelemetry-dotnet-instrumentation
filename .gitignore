@@ -319,6 +319,9 @@ deploy/AzureAppServices/
 # macOS temporal files
 .DS_Store
 
+# NServiceBus files
+.learningtransport
+
 # profiler build files
 src/Datadog.Trace.ClrProfiler.Native/build/
 src/Datadog.Trace.ClrProfiler.Native/deps/
