@@ -312,21 +312,24 @@ BenchmarkDotNet.Artifacts/
 # VSTest results
 *.trx
 
-deploy/linux/
-deploy/AzureAppServices/
-!build/artifacts
-
 # macOS temporal files
 .DS_Store
 
 # NServiceBus files
 .learningtransport
 
+## Tracer .gitignore settings
+# Tracer deployment artifacts
+tracer/deploy/linux/
+tracer/deploy/AzureAppServices/
+!tracer/build/artifacts
+
 # profiler build files
-src/Datadog.Trace.ClrProfiler.Native/build/
-src/Datadog.Trace.ClrProfiler.Native/deps/
-src/Datadog.Trace.ClrProfiler.Native/CMakeFiles/
-src/Datadog.Trace.ClrProfiler.Native/tmp.*
-src/Datadog.Trace.ClrProfiler.Native/Makefile
-src/Datadog.Trace.ClrProfiler.Native/CMakeCache.txt
-src/Datadog.Trace.ClrProfiler.Native/cmake_install.cmake
+tracer/src/Datadog.Trace.ClrProfiler.Native/build/
+tracer/src/Datadog.Trace.ClrProfiler.Native/deps/
+tracer/src/Datadog.Trace.ClrProfiler.Native/CMakeFiles/
+tracer/src/Datadog.Trace.ClrProfiler.Native/tmp.*
+tracer/src/Datadog.Trace.ClrProfiler.Native/Makefile
+tracer/src/Datadog.Trace.ClrProfiler.Native/CMakeCache.txt
+tracer/src/Datadog.Trace.ClrProfiler.Native/cmake_install.cmake
+!tracer/src/Datadog.Trace.ClrProfiler.Native/lib/**
