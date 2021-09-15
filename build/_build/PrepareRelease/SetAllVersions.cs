@@ -281,7 +281,7 @@ namespace PrepareRelease
 
         private string AssemblyString(string versionText)
         {
-            return $"OpenTelemetry.AutoInstrumentation.Trace, Version={versionText}.0, Culture=neutral, PublicKeyToken=34b8972644a12429";
+            return $"OpenTelemetry.AutoInstrumentation, Version={versionText}.0, Culture=neutral, PublicKeyToken=34b8972644a12429";
         }
     }
 }

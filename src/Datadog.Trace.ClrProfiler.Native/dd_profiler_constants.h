@@ -64,9 +64,9 @@ const WSTRING skip_assemblies[]{WStr("mscorlib"),
                                 WStr("ISymWrapper")};
 
 inline WSTRING managed_profiler_full_assembly_version =
-    WStr("OpenTelemetry.AutoInstrumentation.Trace, Version=0.0.1.0, Culture=neutral, PublicKeyToken=34b8972644a12429");
+    WStr("OpenTelemetry.AutoInstrumentation, Version=0.0.1.0, Culture=neutral, PublicKeyToken=34b8972644a12429");
 
-const WSTRING managed_profiler_name = WStr("OpenTelemetry.AutoInstrumentation.Trace");
+const WSTRING managed_profiler_name = WStr("OpenTelemetry.AutoInstrumentation");
 
 const WSTRING nonwindows_nativemethods_type = WStr("Datadog.Trace.ClrProfiler.NativeMethods+NonWindows");
 

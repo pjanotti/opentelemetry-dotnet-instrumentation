@@ -9,7 +9,7 @@ using System.Reflection;
 namespace Datadog.Trace.ClrProfiler.Managed.Loader
 {
     /// <summary>
-    /// A class that attempts to load the OpenTelemetry.AutoInstrumentation.Trace .NET assembly.
+    /// A class that attempts to load the OpenTelemetry.AutoInstrumentation .NET assembly.
     /// </summary>
     public partial class Startup
     {
@@ -39,7 +39,7 @@ namespace Datadog.Trace.ClrProfiler.Managed.Loader
         {
             try
             {
-                var assembly = Assembly.Load("OpenTelemetry.AutoInstrumentation.Trace, Version=0.0.1.0, Culture=neutral, PublicKeyToken=34b8972644a12429");
+                var assembly = Assembly.Load("OpenTelemetry.AutoInstrumentation, Version=0.0.1.0, Culture=neutral, PublicKeyToken=34b8972644a12429");
 
                 if (assembly != null)
                 {
