@@ -87,6 +87,7 @@ stages:
   dependsOn: []
   jobs:
   - job: build
+    displayName: build windows
     pool:
       vmImage: windows-2019
     steps:
@@ -174,11 +175,12 @@ stages:
     vmImage: windows-2019
   jobs:
     - job: managed
+      displayName: managed unit tests windows
       steps:
       - template: steps/install-dotnet.yml
       - template: steps/restore-working-directory.yml
 
-      - script: tracer\build.cmd BuildAndRunManagedUnitTests --code-coverage
+      - script: tracer\build.cmd BuildAndRunManagedUnitTests
         displayName: Build and Test
 
       - publish: tracer/build_data
@@ -194,6 +196,7 @@ stages:
         condition: succeededOrFailed()
 
     - job: native
+      displayName: native unit tests windows
       steps:
       - template: steps/install-dotnet.yml
       - template: steps/restore-working-directory.yml
@@ -230,7 +233,7 @@ stages:
       parameters:
         build: true
         baseImage: $(baseImage)
-        command: "BuildAndRunManagedUnitTests --code-coverage"
+        command: "BuildAndRunManagedUnitTests"
 
     - publish: tracer/build_data
       artifact: profiler-logs_unit_tests_linux_$(Agent.JobName)_$(System.JobAttempt)
@@ -286,7 +289,7 @@ stages:
       condition: eq(variables.requiresCosmos, true)
       workingDirectory: $(Pipeline.Workspace)
 
-    - script: tracer\build.cmd $(target) --PrintDriveSpace --code-coverage
+    - script: tracer\build.cmd $(target) --PrintDriveSpace
       displayName: Run integration tests
 
     - task: PublishTestResults@2
@@ -350,7 +353,7 @@ stages:
         containerregistrytype: Container Registry
         dockerComposeCommand: up -d IntegrationTests.IIS
 
-    - script: tracer\build.cmd RunWindowsIisIntegrationTests --code-coverage
+    - script: tracer\build.cmd RunWindowsIisIntegrationTests
       displayName: RunWindowsIisIntegrationTests
 
     - task: PublishTestResults@2
@@ -380,24 +383,12 @@ stages:
   - job: Test
     strategy:
       matrix:
-        debian_netcoreapp2_1:
-          publishTargetFramework: netcoreapp2.1
-          baseImage: debian
-        debian_netcoreapp3_0:
-          publishTargetFramework: netcoreapp3.0
-          baseImage: debian
         debian_netcoreapp3_1:
           publishTargetFramework: netcoreapp3.1
           baseImage: debian
         debian_net5_0:
           publishTargetFramework: net5.0
           baseImage: debian
-        alpine_netcoreapp2_1:
-          publishTargetFramework: netcoreapp2.1
-          baseImage: alpine
-        alpine_netcoreapp3_0:
-          publishTargetFramework: netcoreapp3.0
-          baseImage: alpine
         alpine_netcoreapp3_1:
           publishTargetFramework: netcoreapp3.1
           baseImage: alpine
@@ -574,228 +565,3 @@ stages:
     - powershell: |
         echo "##vso[build.addbuildtag]$(dotnetToolTag)"
       displayName: Add $(dotnetToolTag) build tag
-
-- stage: upload_to_s3
-  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'), ne(variables['isNgenTestBuild'], 'True'))
-  dependsOn: [package_windows, build_linux]
-  jobs:
-  - job: s3_upload
-
-    pool:
-      vmImage: ubuntu-18.04
-
-    steps:
-
-    - script: |
-        mkdir s3_upload
-      displayName: create s3_upload folder
-
-    - task: DownloadPipelineArtifact@2
-      displayName: Download x64 Windows MSI
-      inputs:
-        artifact: windows-msi-x64
-        patterns: '**/*x64.msi'
-        path: s3_upload
-
-    - task: DownloadPipelineArtifact@2
-      displayName: Download linux-packages
-      inputs:
-        artifact: linux-packages-debian
-        patterns: '**/*amd64.deb'
-        path: s3_upload
-
-    # for prerelease versions, rename datadog-dotnet-apm-{version}-amd64.deb
-    # to datadog-dotnet-apm-{version}-{tag}-amd64.deb (i.e. add the prerelease tag)
-    # by copying most of the filename from datadog-dotnet-apm-{version}-{tag}-x64.msi
-    - script: |
-        MSI_NAME=$(ls s3_upload/*.msi)
-        PACKAGE_NAME=${MSI_NAME::-8}
-        echo Renaming deb package to $PACKAGE_NAME-amd64.deb
-        mv s3_upload/*.deb $PACKAGE_NAME-amd64.deb
-      displayName: Rename deb package name to match MSI name
-
-    # Create index.txt file with the following format:
-    # BRANCH_NAME
-    # SHA
-    # ARTIFACT WILDCARD (datadog-dotnet-apm-vX.X.X-*)
-    # COMMIT AUTHOR
-    # Note: For the branch name, normalize 'refs/heads/<branch>' to '<branch>' and 'refs/tags/<tag_name>' to 'tags/<tag_name>'
-    - script: |
-        INDEX_FILE=$(pwd)/s3_upload/index.txt
-        echo $(Build.SourceBranch) | sed 's/refs\/heads\///g' | sed 's/refs\/tags\//tags\//g' >> $INDEX_FILE
-        git rev-parse HEAD >> $INDEX_FILE
-        pushd s3_upload && name=$(ls *.deb) && echo "${name::-9}*" >> $INDEX_FILE && popd
-        git show -s --format='%ae' HEAD >> $INDEX_FILE
-        echo Generated index.txt file:
-        cat $INDEX_FILE
-      displayName: Write index.txt
-
-    - script: tree s3_upload
-      displayName: 'tree s3_upload'
-
-    - script: |
-        sudo apt-get install -y unzip python3-setuptools
-        curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
-        unzip awscli-bundle.zip
-        sudo python3 ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
-        aws --version
-      displayName: Install AWS CLI
-
-    - script: aws configure set aws_access_key_id $SECRET
-      displayName: Authenticate aws_access_key_id
-      env:
-        SECRET: $(AWS_ACCESS_KEY_ID)
-
-    - script: aws configure set aws_secret_access_key $SECRET
-      displayName: Authenticate aws_secret_access_key
-      env:
-        SECRET: $(AWS_SECRET_ACCESS_KEY)
-
-    # by default, run this step on master branch only.
-    # use "push_artifacts_to_s3" to override:
-    #   "true": run this step
-    #   "false": do NOT run this step
-    #   else: run this stage if branch is master
-
-    - script: aws s3 cp s3_upload s3://datadog-reliability-env/dotnet/ --recursive
-      displayName: Upload deb, MSI, index.txt to s3
-      condition: >
-        and(
-          succeeded(),
-          ne(variables['push_artifacts_to_s3'], 'false'),
-          or(
-            eq(variables['push_artifacts_to_s3'], 'true'),
-            eq(variables.isMainBranch, true)
-          )
-        )
-
-- stage: upload_to_azure
-  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
-  dependsOn: [package_windows, build_linux, dotnet_tool]
-  jobs:
-    - job: upload
-      pool:
-        vmImage: ubuntu-18.04
-      steps:
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download NuGet packages
-          inputs:
-            artifact: nuget-packages
-            path: $(Build.ArtifactStagingDirectory)
-
-        # set the version from the package name
-        - bash: |
-            NUGET_NAME=$(basename $(Build.ArtifactStagingDirectory)/Datadog.Trace.OpenTracing.*.nupkg)
-            VERSION_NUMBER=${NUGET_NAME:26:-6}
-            echo "detected version: $VERSION_NUMBER"
-            echo "##vso[task.setvariable variable=tracer_version]$VERSION_NUMBER"
-          displayName: Extract version number
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download linux Alpine packages
-          inputs:
-            artifact: linux-packages-alpine
-            path: $(Build.ArtifactStagingDirectory)
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download linux Debian packages
-          inputs:
-            artifact: linux-packages-debian
-            path: $(Build.ArtifactStagingDirectory)
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download Windows tracer home
-          inputs:
-            artifact: windows-tracer-home.zip
-            path: $(Build.ArtifactStagingDirectory)
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download distribution nuget package
-          inputs:
-            artifact: distribution-nuget-package
-            path: $(Build.ArtifactStagingDirectory)
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download runner dotnet tool
-          inputs:
-            artifact: runner-dotnet-tool
-            patterns: "*.nupkg"
-            path: $(Build.ArtifactStagingDirectory)
-
-        - publish: "$(Build.ArtifactStagingDirectory)"
-          displayName: Publish release artifacts
-          artifact: $(tracer_version)-release-artifacts
-
-        # We don't include the MSIs in the artifact upload as they're
-        # not signed, but we do include them in the push to Azure
-        - task: DownloadPipelineArtifact@2
-          displayName: Download x64 MSI
-          inputs:
-            artifact: windows-msi-x64
-            path: $(Build.ArtifactStagingDirectory)
-
-        - task: DownloadPipelineArtifact@2
-          displayName: Download x86 MSI
-          inputs:
-            artifact: windows-msi-x86
-            path: $(Build.ArtifactStagingDirectory)
-
-        - bash: |
-            az storage blob upload-batch \
-              --destination "$(AZURE_STORAGE_CONTAINER_NAME)" \
-              --destination-path "$(Build.SourceVersion)" \
-              --source "$(Build.ArtifactStagingDirectory)"
-          displayName: Upload blobs to Azure
-          condition: and(succeeded(), eq(variables.isMainBranch, true), ne(variables['isNgenTestBuild'], 'True'))
-          env:
-            AZURE_STORAGE_ACCOUNT: $(AZURE_STORAGE_ACCOUNT_NAME)
-            AZURE_STORAGE_SAS_TOKEN: $(AZURE_STORAGE_SHARED_ACCESS_TOKEN)
-
-        - bash: ls "$(Build.ArtifactStagingDirectory)" > index.txt
-          displayName: Write file list to index.txt
-
-        - bash: echo "$(Build.SourceVersion)" > sha.txt
-          displayName: Write commit hash to sha.txt
-
-        - bash: |
-            az storage blob upload --container-name "$(AZURE_STORAGE_CONTAINER_NAME)" --file "index.txt" --name "index.txt"
-            az storage blob upload --container-name "$(AZURE_STORAGE_CONTAINER_NAME)" --file "sha.txt" --name "sha.txt"
-          displayName: Upload indexes to Azure
-          condition: and(succeeded(), eq(variables.isMainBranch, true), ne(variables['isNgenTestBuild'], 'True'))
-          env:
-            AZURE_STORAGE_ACCOUNT: $(AZURE_STORAGE_ACCOUNT_NAME)
-            AZURE_STORAGE_SAS_TOKEN: $(AZURE_STORAGE_SHARED_ACCESS_TOKEN)
-
-- stage: coverage
-  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'), ne(variables['isNgenTestBuild'], 'True'))
-  dependsOn: [integration_tests_windows, integration_tests_windows_iis, integration_tests_linux, unit_tests_linux, unit_tests_windows]
-  jobs:
-    - job: Windows
-      timeoutInMinutes: 30
-
-      pool:
-        vmImage: windows-2019
-
-      steps:
-      - template: steps/restore-working-directory.yml
-
-      - task: DownloadPipelineArtifact@2
-        inputs:
-          patterns: '**/coverage.cobertura.xml'
-          path: $(Build.SourcesDirectory)/cover
-
-      # - task: reportgenerator@4
-      #   inputs:
-      #     reports: '$(Build.SourcesDirectory)\cover\**\coverage.cobertura.xml'
-      #     targetdir: '$(Build.SourcesDirectory)\coveragereport'
-      #     sourcedirs: '$(Build.SourcesDirectory);..'
-      #     reporttypes: 'Cobertura'
-
-      # - task: PublishCodeCoverageResults@1
-      #   inputs:
-      #     codeCoverageTool: 'Cobertura'
-      #     summaryFileLocation: '$(Build.SourcesDirectory)/coveragereport/Cobertura.xml'
-      #     pathToSources: '$(Build.SourcesDirectory)'
-
-
