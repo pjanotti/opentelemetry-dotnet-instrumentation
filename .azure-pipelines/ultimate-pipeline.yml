@@ -207,36 +207,6 @@ stages:
           testResultsFiles: tracer/test/**/test*.xml
         condition: succeededOrFailed()
 
-- stage: unit_tests_macos
-  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
-  dependsOn: build_macos
-  jobs:
-  - job: managed
-    pool:
-      vmImage: macOS-10.15
-    steps:
-      - template: steps/install-dotnet.yml
-      - template: steps/restore-working-directory.yml
-        parameters:
-          artifact: build-macos-working-directory
-
-      - script: ./tracer/build.sh BuildAndRunManagedUnitTests --code-coverage
-        displayName: Build and Test
-
-      - publish: tracer/build_data
-        artifact: profiler-logs_unit_tests_macos_$(System.JobAttempt)
-        condition: succeededOrFailed()
-        continueOnError: true
-
-      - task: PublishTestResults@2
-        displayName: publish test results
-        inputs:
-          testResultsFormat: VSTest
-          testResultsFiles: tracer/build_data/results/**/*.trx
-        condition: succeededOrFailed()
-
-
-
 - stage: unit_tests_linux
   condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
   dependsOn: [build_linux]
@@ -576,13 +546,6 @@ stages:
         patterns: "**/*.so"
         path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home/linux-musl-x64
 
-    - task: DownloadPipelineArtifact@2
-      displayName: Download osx tracer home
-      inputs:
-        artifact: macos-tracer-home
-        patterns: "**/*.dylib"
-        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home/osx-x64
-
     # Install the tracer latest stable release to attach the profiler to the build and test steps.
     # The script exposes the required environment variables to the following steps
     - task: PowerShell@2
@@ -876,7 +839,7 @@ stages:
 
 - stage: coverage
   condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'), ne(variables['isNgenTestBuild'], 'True'))
-  dependsOn: [integration_tests_windows, integration_tests_windows_iis, integration_tests_linux, unit_tests_linux, unit_tests_macos, unit_tests_windows]
+  dependsOn: [integration_tests_windows, integration_tests_windows_iis, integration_tests_linux, unit_tests_linux, unit_tests_windows]
   jobs:
     - job: Windows
       timeoutInMinutes: 30
