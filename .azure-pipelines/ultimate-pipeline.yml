@@ -1,0 +1,1160 @@
+trigger:
+  branches:
+    include:
+      - master
+      - release/*
+      - hotfix/*
+      - refs/tags/*
+    exclude:
+      - refs/pull/*/head
+  paths:
+    exclude:
+      - docs/*
+      - .github/*
+# The following is a list of shared asset locations.
+# This is the config for the Tracer CI pipeline,
+# so we are excluding shared assets that are not currently used by the Tracer.
+# We make this list granular, rather than catch-all, on purpose.
+# It makes it easier to selectively remove items from the list, once the Tracer starts using them.
+#     - The Managed Loader:
+      - shared/samples/Datadog.AutoInstrumentation.ManagedLoader.Demo/*
+      - shared/src/managed-lib/ManagedLoader/*
+#     - Dynamic Bindings for DiagnosticSource:
+      - shared/samples/Datadog.DynamicDiagnosticSourceBindings.Demo/*
+      - shared/src/managed-lib/DynamicDiagnosticSourceBindings/*
+#     - Logging damo samples:
+      - shared/samples/Datadog.Logging.Demo/*
+#     - Managed utility APIs (may be used transitively):
+      - shared/src/managed-src/Datadog.Collections/*
+      - shared/src/managed-src/Datadog.Util/*
+#     - Managed Logging APIs (may be used transitively):      
+      - shared/src/managed-src/Datadog.Logging.Emission/*
+      - shared/src/managed-src/Datadog.Logging.Composition/*
+      - shared/src/managed-src/Datadog.Logging/*
+#     - Fmt lib:
+      - shared/src/native-lib/fmt_x64-windows-static/*
+      - shared/src/native-lib/fmt_x86-windows-static/*
+#     - Spglob lib:      
+      - shared/src/native-lib/spdlog/*
+#     - Mics common native sources:
+      - shared/src/native-src/*
+     
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: Daily 3am (UTC) build
+    branches:
+      include:
+        - master
+        - release/*
+        - hotfix/*
+        - /benchmarks/*
+    always: true
+
+# Global variables
+variables:
+  buildConfiguration: Release
+  dotnetCoreSdk5Version: 5.0.103
+  relativeTracerHome: /tracer/src/bin/windows-tracer-home
+  relativeArtifacts: /tracer/src/bin/artifacts
+  ddTracerHome: $(System.DefaultWorkingDirectory)/tracer/src/bin/dd-tracer-home
+  tracerHome: $(System.DefaultWorkingDirectory)/tracer/src/bin/windows-tracer-home
+  artifacts: $(System.DefaultWorkingDirectory)/tracer/src/bin/artifacts
+  ddApiKey: $(DD_API_KEY)
+  isMainBranch: $[eq(variables['Build.SourceBranch'], 'refs/heads/master')]
+  DD_DOTNET_TRACER_MSBUILD:
+  NugetPackageDirectory: $(System.DefaultWorkingDirectory)/packages
+  relativeNugetPackageDirectory: packages
+  # For scheduled builds, only run benchmarks and crank (and deps).
+  isScheduledBuild: ${{ eq(variables['Build.Reason'], 'Schedule') }} # only works if you have a main branch
+  # Allow forcing a benchmark/throughput run using run_benchmarks_only=true
+  dotnetToolTag: build-dotnet-tool
+
+# Declare the datadog agent as a resource to be used as a pipeline service
+resources:
+  containers:
+  - container: dd_agent
+    image: datadog/agent
+    ports:
+    - 8126:8126
+    env:
+      DD_API_KEY: $(ddApiKey)
+      DD_INSIDE_CI: true
+
+# Stages
+stages:
+- stage: build_windows
+  dependsOn: []
+  jobs:
+  - job: build
+    pool:
+      vmImage: windows-2019
+    steps:
+    - template: steps/install-dotnet-5-sdk.yml
+
+    - script: tracer\build.cmd BuildTracerHome
+      displayName: Build tracer home
+
+    - publish: $(tracerHome)
+      displayName: Upload Windows tracer home directory
+      artifact: windows-tracer-home
+
+    - publish: $(System.DefaultWorkingDirectory)
+      displayName: Upload working directory after the managed build
+      artifact: build-windows-working-directory
+
+- stage: build_linux
+  dependsOn: []
+  jobs:
+  - job: build
+    dependsOn: []
+    strategy:
+      matrix:
+        debian:
+          baseImage: debian
+        alpine:
+          baseImage: alpine
+    pool:
+      vmImage: ubuntu-18.04
+
+    steps:
+    - template: steps/run-in-docker.yml
+      parameters:
+        build: true
+        target: builder
+        baseImage: $(baseImage)
+        command: "Clean BuildTracerHome ZipTracerHome"
+
+    - publish: $(tracerHome)
+      displayName: Uploading linux tracer home artifact
+      artifact: linux-tracer-home-$(baseImage)
+
+    - publish: $(artifacts)/linux-x64
+      displayName: Upload linux-x64 packages
+      artifact: linux-packages-$(baseImage)
+
+    - publish: $(System.DefaultWorkingDirectory)
+      displayName: Upload working directory after the build
+      artifact: build-linux-$(baseImage)-working-directory
+
+- stage: build_arm64
+  dependsOn: []
+  jobs:
+  - job: build
+    dependsOn: []
+    pool:
+      name: Arm64
+
+    steps:
+    - template: steps/run-in-docker.yml
+      parameters:
+        build: true
+        target: builder
+        baseImage: debian
+        command: "Clean BuildTracerHome ZipTracerHome"
+
+    - publish: $(tracerHome)
+      displayName: Uploading linux tracer home artifact
+      artifact: linux-tracer-home-arm64
+
+    - publish: $(artifacts)/linux-arm64
+      displayName: Upload linux-arm64 packages
+      artifact: linux-packages-arm64
+
+    - publish: $(System.DefaultWorkingDirectory)
+      displayName: Upload working directory after the build
+      artifact: build-linux-arm64-working-directory
+
+- stage: build_macos
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: []
+  jobs:
+  - job: build
+    dependsOn: [ ]
+    pool:
+      vmImage: macOS-10.15
+    steps:
+    - template: steps/install-dotnet-5-sdk.yml
+    - template: steps/downgrade-macos-cmake.yml
+
+    - script: ./tracer/build.sh BuildTracerHome
+      displayName: Build tracer home
+
+    - publish: $(tracerHome)
+      displayName: Uploading macos profiler artifact
+      artifact: macos-tracer-home
+
+    - publish: $(System.DefaultWorkingDirectory)
+      displayName: Upload working directory after the build
+      artifact: build-macos-working-directory
+
+- stage: package_windows
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: build_windows
+  pool:
+    vmImage: windows-2019
+  jobs:
+  - job: msi_and_pack
+    steps:
+      - template: steps/install-dotnet-5-sdk.yml
+      - template: steps/restore-working-directory.yml
+
+      - script: tracer\build.cmd PackageTracerHome
+        displayName: Build MSI and Tracer home
+
+      - publish: $(artifacts)/windows-tracer-home.zip
+        displayName: Publish tracer-home.zip
+        artifact: windows-tracer-home.zip
+
+      - publish: $(artifacts)/x86/en-us
+        displayName: Publish Windows x86 MSI
+        artifact: windows-msi-x86
+
+      - publish: $(artifacts)/x64/en-us
+        displayName: Publish Windows x64 MSI
+        artifact: windows-msi-x64
+
+      - publish: $(artifacts)/nuget
+        displayName: Publish NuGet packages
+        artifact: nuget-packages
+
+- stage: unit_tests_windows
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: build_windows
+  pool:
+    vmImage: windows-2019
+  jobs:
+    - job: managed
+      steps:
+      - template: steps/install-dotnet.yml
+      - template: steps/restore-working-directory.yml
+
+      - script: tracer\build.cmd BuildAndRunManagedUnitTests --code-coverage
+        displayName: Build and Test
+
+      - publish: tracer/build_data
+        artifact: profiler-logs_unit_tests_windows_$(System.JobAttempt)
+        condition: succeededOrFailed()
+        continueOnError: true
+
+      - task: PublishTestResults@2
+        displayName: publish test results
+        inputs:
+          testResultsFormat: VSTest
+          testResultsFiles: tracer/build_data/results/**/*.trx
+        condition: succeededOrFailed()
+
+    - job: native
+      steps:
+      - template: steps/install-dotnet.yml
+      - template: steps/restore-working-directory.yml
+
+      - script: tracer\build.cmd BuildAndRunNativeUnitTests
+        displayName: Build and Test
+
+      - task: PublishTestResults@2
+        displayName: publish test results
+        inputs:
+          testResultsFiles: tracer/test/**/test*.xml
+        condition: succeededOrFailed()
+
+- stage: unit_tests_macos
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: build_macos
+  jobs:
+  - job: managed
+    pool:
+      vmImage: macOS-10.15
+    steps:
+      - template: steps/install-dotnet.yml
+      - template: steps/restore-working-directory.yml
+        parameters:
+          artifact: build-macos-working-directory
+
+      - script: ./tracer/build.sh BuildAndRunManagedUnitTests --code-coverage
+        displayName: Build and Test
+
+      - publish: tracer/build_data
+        artifact: profiler-logs_unit_tests_macos_$(System.JobAttempt)
+        condition: succeededOrFailed()
+        continueOnError: true
+
+      - task: PublishTestResults@2
+        displayName: publish test results
+        inputs:
+          testResultsFormat: VSTest
+          testResultsFiles: tracer/build_data/results/**/*.trx
+        condition: succeededOrFailed()
+
+
+
+- stage: unit_tests_linux
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: [build_linux]
+  jobs:
+  - job: test
+    strategy:
+      matrix:
+        debian:
+          baseImage: debian
+        alpine:
+          baseImage: alpine
+    pool:
+      vmImage: ubuntu-18.04
+
+    steps:
+    - template: steps/restore-working-directory.yml
+      parameters:
+        artifact: build-linux-$(baseImage)-working-directory
+
+    - template: steps/run-in-docker.yml
+      parameters:
+        build: true
+        baseImage: $(baseImage)
+        command: "BuildAndRunManagedUnitTests --code-coverage"
+
+    - publish: tracer/build_data
+      artifact: profiler-logs_unit_tests_linux_$(Agent.JobName)_$(System.JobAttempt)
+      condition: succeededOrFailed()
+      continueOnError: true
+
+    - task: PublishTestResults@2
+      displayName: publish test results
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: tracer/build_data/results/**/*.trx
+      condition: succeededOrFailed()
+
+- stage: unit_tests_arm64
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: [build_arm64]
+  jobs:
+    - job: test
+      pool:
+        name: Arm64
+
+      steps:
+        - template: steps/restore-working-directory.yml
+          parameters:
+            artifact: build-linux-arm64-working-directory
+
+        - template: steps/run-in-docker.yml
+          parameters:
+            build: true
+            baseImage: debian
+            command: "BuildAndRunManagedUnitTests"
+
+        - publish: tracer/build_data
+          artifact: profiler-logs_unit_tests_linux_$(Agent.JobName)_$(System.JobAttempt)
+          condition: succeededOrFailed()
+          continueOnError: true
+
+        - task: PublishTestResults@2
+          displayName: publish test results
+          inputs:
+            testResultsFormat: VSTest
+            testResultsFiles: tracer/build_data/results/**/*.trx
+          condition: succeededOrFailed()
+
+- stage: integration_tests_windows
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: build_windows
+  pool:
+    vmImage: windows-2019
+  jobs:
+
+  - job: Windows
+    timeoutInMinutes: 100
+    strategy:
+      matrix:
+        x64_integration:
+          platform: x64
+          target: BuildAndRunWindowsIntegrationTests
+          requiresCosmos: true
+        x86_interation:
+          platform: x86
+          target: BuildAndRunWindowsIntegrationTests
+          requiresCosmos: true
+        x64_regression:
+          platform: x64
+          target: BuildAndRunWindowsRegressionTests
+          requiresCosmos: false
+        x86_regression:
+          platform: x86
+          target: BuildAndRunWindowsRegressionTests
+          requiresCosmos: false
+
+    steps:
+    - template: steps/install-dotnet-sdks.yml
+      parameters:
+        includeX86: true
+    - template: steps/restore-working-directory.yml
+
+    - powershell: |
+        Write-Host "Starting CosmosDB Emulator"
+        Import-Module "C:/Program Files/Azure Cosmos DB Emulator/PSModules/Microsoft.Azure.CosmosDB.Emulator"
+        Start-CosmosDbEmulator -Timeout 300
+      displayName: 'Start CosmosDB Emulator'
+      condition: eq(variables.requiresCosmos, true)
+      workingDirectory: $(Pipeline.Workspace)
+
+    - script: tracer\build.cmd $(target) --PrintDriveSpace --code-coverage
+      displayName: Run integration tests
+
+    - task: PublishTestResults@2
+      displayName: publish test results
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: tracer/build_data/results/**/*.trx
+      condition: succeededOrFailed()
+
+    - publish: tracer/build_data
+      displayName: Uploading integration_tests_windows tracer logs
+      artifact: integration_tests_windows_tracer_logs_$(platform)_$(target)
+      condition: succeededOrFailed()
+      continueOnError: true
+
+- stage: integration_tests_windows_iis
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: [build_windows, package_windows]
+  jobs:
+  - job: Windows_IIS
+    timeoutInMinutes: 100
+    strategy:
+      matrix:
+        x64:
+          platform: x64
+          enable32bit: false
+        x86:
+          platform: x86
+          enable32bit: true
+    pool:
+      vmImage: windows-2019
+    variables:
+      relativeMsiOutputDirectory: $(relativeArtifacts)/$(platform)/en-us
+
+    steps:
+
+    - template: steps/install-dotnet-sdks.yml
+      parameters:
+        includeX86: true
+    - template: steps/restore-working-directory.yml
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download MSI
+      inputs:
+        artifact: windows-msi-$(platform)
+        patterns: '**/*.msi'
+        path: $(System.DefaultWorkingDirectory)/$(relativeMsiOutputDirectory)
+
+    - script: tracer\build.cmd BuildWindowsIntegrationTests
+      displayName: BuildWindowsIntegrationTests
+
+    - task: DockerCompose@0
+      displayName: docker-compose build IIS containers
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeCommand: build --build-arg dotnet_tracer_msi=.$(relativeMsiOutputDirectory)/*.msi --build-arg ENABLE_32_BIT=$(enable32bit) IntegrationTests.IIS
+
+    - task: DockerCompose@0
+      displayName: docker-compose start IIS containers
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeCommand: up -d IntegrationTests.IIS
+
+    - script: tracer\build.cmd RunWindowsIisIntegrationTests --code-coverage
+      displayName: RunWindowsIisIntegrationTests
+
+    - task: PublishTestResults@2
+      displayName: publish test results
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: tracer/build_data/results/**/*.trx
+      condition: succeededOrFailed()
+
+    - task: DockerCompose@0
+      displayName: docker-compose stop services
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeCommand: down
+      condition: succeededOrFailed()
+
+    - publish: tracer/build_data
+      displayName: Uploading integration_tests_windows_iis tracer logs
+      artifact: integration_tests_windows_iis_tracer_logs_$(platform)
+      condition: succeededOrFailed()
+      continueOnError: true
+
+- stage: integration_tests_linux
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: [build_linux]
+  jobs:
+  - job: Test
+    strategy:
+      matrix:
+        debian_netcoreapp2_1:
+          publishTargetFramework: netcoreapp2.1
+          baseImage: debian
+        debian_netcoreapp3_0:
+          publishTargetFramework: netcoreapp3.0
+          baseImage: debian
+        debian_netcoreapp3_1:
+          publishTargetFramework: netcoreapp3.1
+          baseImage: debian
+        debian_net5_0:
+          publishTargetFramework: net5.0
+          baseImage: debian
+        alpine_netcoreapp2_1:
+          publishTargetFramework: netcoreapp2.1
+          baseImage: alpine
+        alpine_netcoreapp3_0:
+          publishTargetFramework: netcoreapp3.0
+          baseImage: alpine
+        alpine_netcoreapp3_1:
+          publishTargetFramework: netcoreapp3.1
+          baseImage: alpine
+        alpine_net5_0:
+          publishTargetFramework: net5.0
+          baseImage: alpine
+
+    variables:
+      TestAllPackageVersions: true
+
+    pool:
+      vmImage: ubuntu-18.04
+
+    steps:
+    # Doing a clean of obj files _before_ restore to remove build output from previous runs
+    # Can't do a full clean, as otherwise restore-working-directory fails
+    # Only necessary for ARM64, but shouldn't cause any harm on others
+    # Can't ifdef it as depends on a matrix variable
+    - template: steps/run-in-docker.yml
+      parameters:
+        build: true
+        baseImage: $(baseImage)
+        command: "CleanObjFiles"
+
+    - template: steps/restore-working-directory.yml
+      parameters:
+        artifact: build-linux-$(baseImage)-working-directory
+
+    - template: steps/run-in-docker.yml
+      parameters:
+        build: true
+        baseImage: $(baseImage)
+        command: "BuildLinuxIntegrationTests --framework $(publishTargetFramework)"
+
+    - task: DockerCompose@0
+      displayName: docker-compose build IntegrationTests
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeCommand: build --build-arg baseImage=$(baseImage) --build-arg framework=$(publishTargetFramework) IntegrationTests
+
+    - task: DockerCompose@0
+      displayName: docker-compose start dependencies
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeCommand: run --rm StartDependencies
+
+    - task: DockerCompose@0
+      displayName: docker-compose run IntegrationTests
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeFileArgs: |
+          baseImage=$(baseImage)
+          framework=$(publishTargetFramework)
+        dockerComposeCommand: run --rm -e baseImage=$(baseImage) -e framework=$(publishTargetFramework) IntegrationTests
+
+    - task: DockerCompose@0
+      displayName: docker-compose stop services
+      inputs:
+        containerregistrytype: Container Registry
+        dockerComposeCommand: down
+      condition: succeededOrFailed()
+
+    - publish: tracer/build_data
+      artifact: profiler-logs_integration_tests_linux_$(baseImage)_$(publishTargetFramework)_$(System.JobAttempt)
+      condition: succeededOrFailed()
+      continueOnError: true
+
+    - task: PublishTestResults@2
+      displayName: publish test results
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: tracer/build_data/results/**/*.trx
+      condition: succeededOrFailed()
+
+- stage: integration_tests_arm64
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: [build_arm64]
+  jobs:
+    - job: Test
+      variables:
+        TestAllPackageVersions: true
+        publishTargetFramework: net5.0
+        baseImage: debian
+
+      pool:
+        name: Arm64
+
+      steps:
+        # Doing a clean of obj files _before_ restore to remove build output from previous runs
+        # Can't do a full clean, as otherwise restore-working-directory fails
+        # Only necessary for ARM64, but shouldn't cause any harm on others
+        # Can't ifdef it as depends on a matrix variable
+        - template: steps/run-in-docker.yml
+          parameters:
+            build: true
+            baseImage: $(baseImage)
+            command: "CleanObjFiles"
+
+        - template: steps/restore-working-directory.yml
+          parameters:
+            artifact: build-linux-arm64-working-directory
+
+        - template: steps/run-in-docker.yml
+          parameters:
+            build: true
+            baseImage: $(baseImage)
+            command: "BuildLinuxIntegrationTests --framework $(publishTargetFramework)"
+
+        - task: DockerCompose@0
+          displayName: docker-compose build IntegrationTests
+          inputs:
+            containerregistrytype: Container Registry
+            dockerComposeCommand: build --build-arg baseImage=$(baseImage) --build-arg framework=$(publishTargetFramework) IntegrationTests.ARM64
+            projectName: ddtrace_$(Build.BuildNumber)
+
+        - task: DockerCompose@0
+          displayName: docker-compose start dependencies
+          inputs:
+            containerregistrytype: Container Registry
+            dockerComposeCommand: run --rm StartDependencies.ARM64
+            projectName: ddtrace_$(Build.BuildNumber)
+
+        - task: DockerCompose@0
+          displayName: docker-compose run IntegrationTests
+          inputs:
+            containerregistrytype: Container Registry
+            dockerComposeFileArgs: |
+              baseImage=$(baseImage)
+              framework=$(publishTargetFramework)
+            dockerComposeCommand: run --rm -e baseImage=$(baseImage) -e framework=$(publishTargetFramework) IntegrationTests.ARM64
+            projectName: ddtrace_$(Build.BuildNumber)
+
+        - task: DockerCompose@0
+          displayName: docker-compose stop services
+          inputs:
+            containerregistrytype: Container Registry
+            dockerComposeCommand: down
+            projectName: ddtrace_$(Build.BuildNumber)
+          condition: succeededOrFailed()
+
+        - publish: tracer/build_data
+          artifact: profiler-logs_integration_tests_linux_arm64_$(publishTargetFramework)_$(System.JobAttempt)
+          condition: succeededOrFailed()
+          continueOnError: true
+
+        - task: PublishTestResults@2
+          displayName: publish test results
+          inputs:
+            testResultsFormat: VSTest
+            testResultsFiles: tracer/build_data/results/**/*.trx
+          condition: succeededOrFailed()
+
+- stage: benchmarks
+  condition: and(succeeded(), ne(variables['isNgenTestBuild'], 'True'))
+  dependsOn: build_windows
+  jobs:
+
+  #### Windows
+
+  - job: Windows
+    timeoutInMinutes: 100
+    pool: Benchmarks
+
+    # Enable the Datadog Agent service for this job
+    services:
+      dd_agent: dd_agent
+
+    steps:
+
+    - template: steps/install-dotnet-5-sdk.yml
+    - template: steps/restore-working-directory.yml
+
+    - script: tracer\build.cmd RunBenchmarks
+      continueOnError: true
+      displayName: RunBenchmarks
+
+    ## Is this really necessary?
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        script: 'Start-Sleep -s 120'
+
+- stage: dotnet_tool
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'), ne(variables['isNgenTestBuild'], 'True'))
+  dependsOn: [build_windows, build_linux, build_arm64, build_macos]
+  jobs:
+  - job: build_runner_tool_and_standalone
+
+    pool:
+      vmImage: windows-2019
+
+    # Enable the Datadog Agent service for this job
+    services:
+      dd_agent: dd_agent
+
+    steps:
+    - template: steps/install-dotnet-5-sdk.yml
+    - template: steps/restore-working-directory.yml
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download windows tracer home
+      inputs:
+        artifact: windows-tracer-home
+        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download linux shell scripts
+      inputs:
+        artifact: linux-tracer-home-debian
+        patterns: "*.sh"
+        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download linux tracer home
+      inputs:
+        artifact: linux-tracer-home-debian
+        patterns: "**/*.so"
+        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home/linux-x64
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download alpine tracer home
+      inputs:
+        artifact: linux-tracer-home-alpine
+        patterns: "**/*.so"
+        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home/linux-musl-x64
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download arm64 tracer home
+      inputs:
+        artifact: linux-tracer-home-arm64
+        patterns: "**/*.so"
+        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home/linux-arm64
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download osx tracer home
+      inputs:
+        artifact: macos-tracer-home
+        patterns: "**/*.dylib"
+        path: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/home/osx-x64
+
+    # Install the tracer latest stable release to attach the profiler to the build and test steps.
+    # The script exposes the required environment variables to the following steps
+    - task: PowerShell@2
+      displayName: Install profiler latest release
+      inputs:
+        filePath: ./.azure-pipelines/setup_tracer.ps1
+
+    - script: tracer\build.cmd BuildDistributionNuget --skip
+      displayName: Build BuildDistributionNuget package
+
+    - script: tracer\build.cmd BuildRunnerTool --skip
+      displayName: Build Runner tool
+
+    - script: tracer\build.cmd BuildStandaloneTool --skip
+      displayName: Build Standalone tool
+
+    - task: DeleteFiles@1
+      displayName: 'Remove unneeded files'
+      inputs:
+        Contents: |
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Tool/!(*.nupkg)
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/win-x64/home*
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/win-x86/home*
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/linux-x64/home*
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/linux-musl-x64/home*
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/linux-arm64/home*
+          $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/osx-x64/home*
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Monitoring.Distribution/bin/$(buildConfiguration)/packages
+      displayName: Publish Distribution package
+      artifact: distribution-nuget-package
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Tool
+      displayName: Uploading runner dotnet tool artifact
+      artifact: runner-dotnet-tool
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/win-x64
+      displayName: Uploading runner standalone win-x64 artifact
+      artifact: runner-standalone-win-x64
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/win-x86
+      displayName: Uploading runner standalone win-x86 artifact
+      artifact: runner-standalone-win-x86
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/linux-x64
+      displayName: Uploading runner standalone linux-x64 artifact
+      artifact: runner-standalone-linux-x64
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/linux-musl-x64
+      displayName: Uploading runner standalone linux-musl-x64 artifact
+      artifact: runner-standalone-linux-musl-x64
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/linux-arm64
+      displayName: Uploading runner standalone linux-arm64 artifact
+      artifact: runner-standalone-linux-arm64
+
+    - publish: $(System.DefaultWorkingDirectory)/tracer/src/Datadog.Trace.Tools.Runner/bin/$(buildConfiguration)/Console/publish/osx-x64
+      displayName: Uploading runner standalone osx-x64 artifact
+      artifact: runner-standalone-osx-x64
+
+    - powershell: |
+        echo "##vso[build.addbuildtag]$(dotnetToolTag)"
+      displayName: Add $(dotnetToolTag) build tag
+
+- stage: upload_to_s3
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'), ne(variables['isNgenTestBuild'], 'True'))
+  dependsOn: [package_windows, build_linux, build_arm64]
+  jobs:
+  - job: s3_upload
+
+    pool:
+      vmImage: ubuntu-18.04
+
+    steps:
+
+    - script: |
+        mkdir s3_upload
+      displayName: create s3_upload folder
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download x64 Windows MSI
+      inputs:
+        artifact: windows-msi-x64
+        patterns: '**/*x64.msi'
+        path: s3_upload
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download linux-packages
+      inputs:
+        artifact: linux-packages-debian
+        patterns: '**/*amd64.deb'
+        path: s3_upload
+
+    # for prerelease versions, rename datadog-dotnet-apm-{version}-amd64.deb
+    # to datadog-dotnet-apm-{version}-{tag}-amd64.deb (i.e. add the prerelease tag)
+    # by copying most of the filename from datadog-dotnet-apm-{version}-{tag}-x64.msi
+    - script: |
+        MSI_NAME=$(ls s3_upload/*.msi)
+        PACKAGE_NAME=${MSI_NAME::-8}
+        echo Renaming deb package to $PACKAGE_NAME-amd64.deb
+        mv s3_upload/*.deb $PACKAGE_NAME-amd64.deb
+      displayName: Rename deb package name to match MSI name
+
+    # Create index.txt file with the following format:
+    # BRANCH_NAME
+    # SHA
+    # ARTIFACT WILDCARD (datadog-dotnet-apm-vX.X.X-*)
+    # COMMIT AUTHOR
+    # Note: For the branch name, normalize 'refs/heads/<branch>' to '<branch>' and 'refs/tags/<tag_name>' to 'tags/<tag_name>'
+    - script: |
+        INDEX_FILE=$(pwd)/s3_upload/index.txt
+        echo $(Build.SourceBranch) | sed 's/refs\/heads\///g' | sed 's/refs\/tags\//tags\//g' >> $INDEX_FILE
+        git rev-parse HEAD >> $INDEX_FILE
+        pushd s3_upload && name=$(ls *.deb) && echo "${name::-9}*" >> $INDEX_FILE && popd
+        git show -s --format='%ae' HEAD >> $INDEX_FILE
+        echo Generated index.txt file:
+        cat $INDEX_FILE
+      displayName: Write index.txt
+
+    - script: tree s3_upload
+      displayName: 'tree s3_upload'
+
+    - script: |
+        sudo apt-get install -y unzip python3-setuptools
+        curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+        unzip awscli-bundle.zip
+        sudo python3 ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+        aws --version
+      displayName: Install AWS CLI
+
+    - script: aws configure set aws_access_key_id $SECRET
+      displayName: Authenticate aws_access_key_id
+      env:
+        SECRET: $(AWS_ACCESS_KEY_ID)
+
+    - script: aws configure set aws_secret_access_key $SECRET
+      displayName: Authenticate aws_secret_access_key
+      env:
+        SECRET: $(AWS_SECRET_ACCESS_KEY)
+
+    # by default, run this step on master branch only.
+    # use "push_artifacts_to_s3" to override:
+    #   "true": run this step
+    #   "false": do NOT run this step
+    #   else: run this stage if branch is master
+
+    - script: aws s3 cp s3_upload s3://datadog-reliability-env/dotnet/ --recursive
+      displayName: Upload deb, MSI, index.txt to s3
+      condition: >
+        and(
+          succeeded(),
+          ne(variables['push_artifacts_to_s3'], 'false'),
+          or(
+            eq(variables['push_artifacts_to_s3'], 'true'),
+            eq(variables.isMainBranch, true)
+          )
+        )
+
+- stage: upload_to_azure
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'))
+  dependsOn: [package_windows, build_linux, build_arm64, dotnet_tool]
+  jobs:
+    - job: upload
+      pool:
+        vmImage: ubuntu-18.04
+      steps:
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download NuGet packages
+          inputs:
+            artifact: nuget-packages
+            path: $(Build.ArtifactStagingDirectory)
+
+        # set the version from the package name
+        - bash: |
+            NUGET_NAME=$(basename $(Build.ArtifactStagingDirectory)/Datadog.Trace.OpenTracing.*.nupkg)
+            VERSION_NUMBER=${NUGET_NAME:26:-6}
+            echo "detected version: $VERSION_NUMBER"
+            echo "##vso[task.setvariable variable=tracer_version]$VERSION_NUMBER"
+          displayName: Extract version number
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download linux Alpine packages
+          inputs:
+            artifact: linux-packages-alpine
+            path: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download linux Debian packages
+          inputs:
+            artifact: linux-packages-debian
+            path: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download linux Arm64 packages
+          inputs:
+            artifact: linux-packages-arm64
+            path: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download Windows tracer home
+          inputs:
+            artifact: windows-tracer-home.zip
+            path: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download distribution nuget package
+          inputs:
+            artifact: distribution-nuget-package
+            path: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download runner dotnet tool
+          inputs:
+            artifact: runner-dotnet-tool
+            patterns: "*.nupkg"
+            path: $(Build.ArtifactStagingDirectory)
+
+        - publish: "$(Build.ArtifactStagingDirectory)"
+          displayName: Publish release artifacts
+          artifact: $(tracer_version)-release-artifacts
+
+        # We don't include the MSIs in the artifact upload as they're
+        # not signed, but we do include them in the push to Azure
+        - task: DownloadPipelineArtifact@2
+          displayName: Download x64 MSI
+          inputs:
+            artifact: windows-msi-x64
+            path: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadPipelineArtifact@2
+          displayName: Download x86 MSI
+          inputs:
+            artifact: windows-msi-x86
+            path: $(Build.ArtifactStagingDirectory)
+
+        - bash: |
+            az storage blob upload-batch \
+              --destination "$(AZURE_STORAGE_CONTAINER_NAME)" \
+              --destination-path "$(Build.SourceVersion)" \
+              --source "$(Build.ArtifactStagingDirectory)"
+          displayName: Upload blobs to Azure
+          condition: and(succeeded(), eq(variables.isMainBranch, true), ne(variables['isNgenTestBuild'], 'True'))
+          env:
+            AZURE_STORAGE_ACCOUNT: $(AZURE_STORAGE_ACCOUNT_NAME)
+            AZURE_STORAGE_SAS_TOKEN: $(AZURE_STORAGE_SHARED_ACCESS_TOKEN)
+
+        - bash: ls "$(Build.ArtifactStagingDirectory)" > index.txt
+          displayName: Write file list to index.txt
+
+        - bash: echo "$(Build.SourceVersion)" > sha.txt
+          displayName: Write commit hash to sha.txt
+
+        - bash: |
+            az storage blob upload --container-name "$(AZURE_STORAGE_CONTAINER_NAME)" --file "index.txt" --name "index.txt"
+            az storage blob upload --container-name "$(AZURE_STORAGE_CONTAINER_NAME)" --file "sha.txt" --name "sha.txt"
+          displayName: Upload indexes to Azure
+          condition: and(succeeded(), eq(variables.isMainBranch, true), ne(variables['isNgenTestBuild'], 'True'))
+          env:
+            AZURE_STORAGE_ACCOUNT: $(AZURE_STORAGE_ACCOUNT_NAME)
+            AZURE_STORAGE_SAS_TOKEN: $(AZURE_STORAGE_SHARED_ACCESS_TOKEN)
+
+
+
+- stage: throughput
+  condition: and(succeeded(), ne(variables['isNgenTestBuild'], 'True'))
+  dependsOn: [build_linux, build_arm64, build_windows]
+  jobs:
+
+  #### Throughput Linux 64, windows 64, linux arm 64 
+
+  - job: Throughput
+    pool: Throughput
+    timeoutInMinutes: 190
+
+    steps:
+    - task: DownloadPipelineArtifact@2
+      displayName: Download windows native binary
+      inputs:
+        artifact: windows-tracer-home
+        path: $(System.DefaultWorkingDirectory)/tracer/tracer-home-win
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download linux native binary
+      inputs:
+        artifact: linux-tracer-home-debian
+        path: $(System.DefaultWorkingDirectory)/tracer/tracer-home-linux
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download arm64 native binary
+      inputs:
+        artifact: linux-tracer-home-arm64
+        path: $(System.DefaultWorkingDirectory)/tracer/tracer-home-linux-arm64
+
+    - script: |
+        test ! -s "tracer/tracer-home-win/integrations.json" && echo "tracer/tracer-home-win/integrations.json does not exist" && exit 1
+        test ! -s "tracer/tracer-home-win/win-x64/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.dll" && echo "tracer/tracer-home-win/win-x64/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.dll does not exist" && exit 1
+        test ! -s "tracer/tracer-home-win/win-x64/ddwaf.dll" && echo "tracer/tracer-home-win/win-x64/ddwaf.dll does not exist" && exit 1
+        test ! -s "tracer/tracer-home-linux/integrations.json" && echo "tracer/tracer-home-linux/integrations.json does not exist" && exit 1
+        test ! -s "tracer/tracer-home-linux/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so" && echo "tracer/tracer-home-linux/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so does not exist" && exit 1
+        test ! -s "tracer/tracer-home-linux/libddwaf.so" && echo "tracer/tracer-home-linux/libddwaf.so does not exist" && exit 1
+        test ! -s "tracer/tracer-home-linux-arm64/integrations.json" && echo "tracer/tracer-home-linux-arm64/integrations.json does not exist" && exit 1
+        test ! -s "tracer/tracer-home-linux-arm64/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so" && echo "tracer/tracer-home-linux-arm64/OpenTelemetry.AutoInstrumentation.ClrProfiler.Native.so does not exist" && exit 1
+        cd $(System.DefaultWorkingDirectory)/tracer/build/crank
+        chmod +x ./run.sh
+        ./run.sh
+      displayName: Crank
+      env:
+        DD_SERVICE: dd-trace-dotnet
+
+- stage: coverage
+  condition: and(succeeded(), eq(variables['isScheduledBuild'], 'False'), ne(variables['isNgenTestBuild'], 'True'))
+  dependsOn: [integration_tests_windows, integration_tests_windows_iis, integration_tests_linux, unit_tests_linux, unit_tests_macos, unit_tests_windows]
+  jobs:
+    - job: Windows
+      timeoutInMinutes: 30
+
+      pool:
+        vmImage: windows-2019
+
+      steps:
+      - template: steps/restore-working-directory.yml
+
+      - task: DownloadPipelineArtifact@2
+        inputs:
+          patterns: '**/coverage.cobertura.xml'
+          path: $(Build.SourcesDirectory)/cover
+
+      - task: reportgenerator@4
+        inputs:
+          reports: '$(Build.SourcesDirectory)\cover\**\coverage.cobertura.xml'
+          targetdir: '$(Build.SourcesDirectory)\coveragereport'
+          sourcedirs: '$(Build.SourcesDirectory);..'
+          reporttypes: 'Cobertura'
+
+      - task: PublishCodeCoverageResults@1
+        inputs:
+          codeCoverageTool: 'Cobertura'
+          summaryFileLocation: '$(Build.SourcesDirectory)/coveragereport/Cobertura.xml'
+          pathToSources: '$(Build.SourcesDirectory)'
+
+
+
+- stage: execution_benchmarks
+  condition: and(succeeded(), ne(variables['isNgenTestBuild'], 'True'))
+  dependsOn: [build_windows]
+  jobs:
+  - job: windows
+    pool:
+      vmImage: windows-2019
+    # Enable the Datadog Agent service for this job
+    services:
+      dd_agent: dd_agent
+    steps:
+    - template: steps/install-dotnet.yml
+    - template: steps/restore-working-directory.yml
+
+    - task: DownloadPipelineArtifact@2
+      displayName: Download windows native binary
+      inputs:
+        artifact: windows-tracer-home
+        path: $(System.DefaultWorkingDirectory)/bin/tracer-home
+
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'build'
+        arguments: '-c Release'
+        workingDirectory: $(System.DefaultWorkingDirectory)/tracer/test/test-applications/integrations/Samples.HttpMessageHandler
+      displayName: 'dotnet build Release'
+
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'build'
+        arguments: '-c Release'
+        workingDirectory: $(System.DefaultWorkingDirectory)/tracer/test/test-applications/integrations/Samples.FakeDbCommand
+      displayName: 'dotnet build Release'
+
+    - task: GoTool@0
+      displayName: 'Install Go 1.16'
+      inputs:
+        version: '1.16'
+        goPath: '$(System.DefaultWorkingDirectory)'
+        workingDirectory: $(System.DefaultWorkingDirectory)
+
+    - task: Go@0
+      displayName: 'Install timeit tool'
+      inputs:
+        command: 'install'
+        arguments: 'github.com/tonyredondo/timeit@latest'
+        workingDirectory: $(System.DefaultWorkingDirectory)
+
+    - script: run.cmd
+      workingDirectory: $(System.DefaultWorkingDirectory)/tracer/build/timeit/Samples.HttpMessageHandler
+      displayName: Execute Samples.HttpMessageHandler benchmark
+      env:
+        DD_SERVICE: dd-trace-dotnet
+
+    - script: run.cmd
+      workingDirectory: $(System.DefaultWorkingDirectory)/tracer/build/timeit/Samples.FakeDbCommand
+      displayName: Execute Samples.FakeDbCommand benchmark
+      env:
+        DD_SERVICE: dd-trace-dotnet
+
+    - task: PowerShell@2
+      displayName: Wait 20 seconds to agent flush before finishing pipeline
+      inputs:
+        targetType: 'inline'
+        script: 'Start-Sleep -s 20'
