@@ -397,7 +397,7 @@ stages:
           baseImage: alpine
 
     variables:
-      TestAllPackageVersions: false
+      TestAllPackageVersions: true
 
     pool:
       vmImage: ubuntu-18.04
