@@ -89,7 +89,7 @@ public class Program
             var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
 
             myFruitCounter.Add(1, new KeyValuePair<string, object>("name", "apple"));
-            Console.WriteLine($"EmitMetrics: [{DateTime.Now}] Counter.Add completed");
+            Console.WriteLine($"EmitMetrics: [{DateTime.Now}] Counter.Add completed. Counter.Enabled is {myFruitCounter.Enabled}");
         }
         catch (Exception ex)
         {
