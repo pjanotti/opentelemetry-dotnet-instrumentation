@@ -168,7 +168,7 @@ public class SmokeTests : TestHelper
             {
                 var httpClient = new HttpClient
                 {
-                    Timeout = 5.Seconds()
+                    Timeout = 25.Seconds()
                 };
                 var response = await httpClient.GetAsync(defaultPrometheusMetricsEndpoint);
                 response.StatusCode.Should().Be(HttpStatusCode.OK);
