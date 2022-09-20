@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net.Http;
+using System.Threading.Tasks;
 using TestApplication.Shared;
 
 namespace TestApplication.Smoke;
@@ -85,11 +86,19 @@ public class Program
     {
         try
         {
-            using var myMeter = new Meter(SourceName, "1.0");
-            var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
+            Task.Run(async () =>
+            {
+                using var myMeter = new Meter(SourceName, "1.0");
+                while (true)
+                {
+                    var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
 
-            myFruitCounter.Add(1, new KeyValuePair<string, object>("name", "apple"));
-            Console.WriteLine($"EmitMetrics: [{DateTime.Now}] Counter.Add completed. Counter.Enabled is {myFruitCounter.Enabled}");
+                    myFruitCounter.Add(1, new KeyValuePair<string, object>("name", "apple"));
+                    Console.WriteLine($"EmitMetrics: [{DateTime.Now}] Counter.Add completed. Counter.Enabled is {myFruitCounter.Enabled}");
+
+                    await Task.Delay(500);
+                }
+            });
         }
         catch (Exception ex)
         {
