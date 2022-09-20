@@ -89,14 +89,14 @@ public class Program
             Task.Run(async () =>
             {
                 using var myMeter = new Meter(SourceName, "1.0");
+                var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
+
                 while (true)
                 {
-                    var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
-
                     myFruitCounter.Add(1, new KeyValuePair<string, object>("name", "apple"));
                     Console.WriteLine($"EmitMetrics: [{DateTime.Now}] Counter.Add completed. Counter.Enabled is {myFruitCounter.Enabled}");
 
-                    await Task.Delay(500);
+                    await Task.Delay(2000);
                 }
             });
         }
