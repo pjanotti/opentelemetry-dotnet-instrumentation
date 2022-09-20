@@ -85,11 +85,11 @@ public class Program
     {
         try
         {
-            var myMeter = new Meter(SourceName, "1.0");
+            using var myMeter = new Meter(SourceName, "1.0");
             var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
 
             myFruitCounter.Add(1, new KeyValuePair<string, object>("name", "apple"));
-            Console.WriteLine("EmitMetrics: [{DateTime.Now}] Counter.Add completed");
+            Console.WriteLine($"EmitMetrics: [{DateTime.Now}] Counter.Add completed");
         }
         catch (Exception ex)
         {
