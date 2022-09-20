@@ -156,6 +156,7 @@ public class SmokeTests : TestHelper
         SetEnvironmentVariable("LONG_RUNNING", "true");
         SetEnvironmentVariable("OTEL_METRICS_EXPORTER", "prometheus");
         SetEnvironmentVariable("OTEL_DOTNET_AUTO_METRICS_ADDITIONAL_SOURCES", "MyCompany.MyProduct.MyLibrary");
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_METRICS_CONSOLE_EXPORTER_ENABLED", "true");
         const string defaultPrometheusMetricsEndpoint = "http://localhost:9464/metrics";
 
         using var process = StartTestApplication();
