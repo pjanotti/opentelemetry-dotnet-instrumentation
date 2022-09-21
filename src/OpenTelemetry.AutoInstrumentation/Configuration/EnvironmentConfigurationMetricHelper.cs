@@ -32,9 +32,7 @@ internal static class EnvironmentConfigurationMetricHelper
 
     public static MeterProviderBuilder UseEnvironmentVariables(this MeterProviderBuilder builder, MetricSettings settings)
     {
-        builder
-            .SetExporter(settings)
-            .AddMeter(settings.Meters.ToArray());
+        builder.AddMeter(settings.Meters.ToArray());
 
         foreach (var enabledMeter in settings.EnabledInstrumentations)
         {
@@ -44,7 +42,7 @@ internal static class EnvironmentConfigurationMetricHelper
             }
         }
 
-        return builder;
+        return builder.SetExporter(settings);
     }
 
     public static MeterProviderBuilder AddSdkAspNetInstrumentation(this MeterProviderBuilder builder)
