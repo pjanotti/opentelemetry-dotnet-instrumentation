@@ -48,6 +48,10 @@ jobs:
         shell: powershell
         run: |
           Start-Service W3SVC
+      - name: Get IIS service (W3SVC) status
+        shell: powershell
+        run: |
+          Get-Service W3SVC
       - name: Test the PowerShell module instructions from README.md
         shell: powershell
         run: |
