@@ -40,11 +40,17 @@ jobs:
       - uses: actions/setup-dotnet@v3.0.3
         with:
           dotnet-version: 6.0.x
-      - name: Test the PowerShell module instructions from README.md
+      - name: Install IIS
         shell: powershell
         run: |
           Add-WindowsFeature Web-Server
+      - name: Start IIS service (W3SVC)
+        shell: powershell
+        run: |
           Start-Service W3SVC
+      - name: Test the PowerShell module instructions from README.md
+        shell: powershell
+        run: |
           $module_url = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/OpenTelemetry.DotNet.Auto.psm1"
           $dl_path = Join-Path $env:temp "OpenTelemetry.DotNet.Auto.psm1"
           $log_path = "C:\ProgramData\OpenTelemetry .NET AutoInstrumentation\logs\*"
