@@ -1,0 +1,18 @@
+<Project>
+  <Target Name="OpenTelemetryAutoInstrumentation" BeforeTargets="Build">
+
+    <Message Text="OpenTelemetry Automatic Instrumentation: checking for instrumentation candidate libraries." />
+
+    <!-- Check for MongoDB.Driver.Core usage -->
+    <PropertyGroup>
+      <MongoDBDriverCoreVersion Condition="'%(PackageReference.Identity)' == 'MongoDB.Driver.Core'">%(PackageReference.Version)</MongoDBDriverCoreVersion>
+      <HasMongoDBDriverInRange Condition="$(MongoDBDriverCoreVersion) != '' AND $([MSBuild]::VersionGreaterThanOrEquals($(MongoDBDriverCoreVersion), '2.13.3')) AND $([MSBuild]::VersionLessThan($(MongoDBDriverCoreVersion), '3.0.0'))">true</HasMongoDBDriverInRange>
+      <HasMongoDBDriverCoreAdapter Condition="$(DoNotInstrumentMongoDBDriverCore) != true">@(PackageReference->AnyHaveMetadataValue("Identity", "MongoDB.Driver.Core.Extensions.DiagnosticSources"))</HasMongoDBDriverCoreAdapter>
+    </PropertyGroup>
+    <Message Condition="$(HasMongoDBDriverInRange) == true" Text="OpenTelemetry Automatic Instrumentation: project references MongoDB.Driver.Core v$(MongoDBDriverCoreVersion)" />
+    <Error 
+      Condition="$(HasMongoDBDriverInRange) == true AND $(DoNotInstrumentMongoDBDriverCore) != '' AND $(HasMongoDBDriverCoreAdapter) != true"
+      Text="Add a reference to the NuGet package 'MongoDB.Driver.Core.Extensions.DiagnosticSources' version 1.3.0 or define a constant 'DoNotInstrumentMongoDBDriverCore' in the project." />
+
+  </Target>
+</Project>

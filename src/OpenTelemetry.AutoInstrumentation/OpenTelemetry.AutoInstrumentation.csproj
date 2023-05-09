@@ -6,8 +6,17 @@
     <PackageId>OpenTelemetry.AutoInstrumentation.Runtime.Managed</PackageId>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!-- Separate dependencies are to be shipped in the distribution but not on the NuGet package -->
+  <ItemGroup Condition="$(_IsPacking) != true">
+    <!-- The dependencies below are not included by the NuGet package, only on the distribution folder. -->
     <PackageReference Include="MongoDB.Driver.Core.Extensions.DiagnosticSources" />
+  </ItemGroup>
+  <ItemGroup Condition="$(_IsPacking) == true">
+    <!-- Dependencies and assets that are included only on the NuGet package. -->
+    <None Include="OpenTelemetry.AutoInstrumentation.Runtime.Managed.targets" Pack="true" PackagePath="build" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Api" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" />
