@@ -50,6 +50,7 @@ jobs:
         with:
           dotnet-version: | 
             6.0.413
+            7.0.101
             7.0.400
       - name: Check for NuGet packages cache
         uses: actions/cache@v3.3.1
@@ -95,6 +96,7 @@ jobs:
         with:
           dotnet-version: | 
             6.0.413
+            7.0.101
             7.0.400
       - name: Check for NuGet packages cache
         uses: actions/cache@v3.3.1
@@ -126,6 +128,7 @@ jobs:
         with:
           dotnet-version: | 
             6.0.413
+            7.0.101
             7.0.400
       - name: Check for NuGet packages cache
         uses: actions/cache@v3.3.1
@@ -200,6 +203,7 @@ jobs:
         with:
           dotnet-version: | 
             6.0.413
+            7.0.101
             7.0.400
       - name: Check for NuGet packages cache
         uses: actions/cache@v3.3.1

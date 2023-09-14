@@ -4,6 +4,14 @@
     <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- When building with latest SDK any System.* are not going to be included if they are smaller than the building SDK. -->
+    <!-- Ensure that it works with all versions by targetting the smallest franework version. If at runtime it is a later   -->
+    <!-- version than the required by AdditionalDeps the version from the runtime framework is used instead.                -->
+    <RollForward>Disabled</RollForward>
+    <RuntimeFrameworkVersion>7.0.0</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
   <Target Name="CallComposeStore" AfterTargets="Publish">
     <PropertyGroup>
       <AdditionalDepsPath>$(OutputDir)\AdditionalDeps</AdditionalDepsPath>

@@ -500,8 +500,10 @@ partial class Build
                 Directory.Delete(StoreDirectory, true);
             }
 
+            var project = Solution.GetProjectByName(Projects.AutoInstrumentationAdditionalDeps);
             DotNetPublish(s => s
-                .SetProject(Solution.GetProjectByName(Projects.AutoInstrumentationAdditionalDeps))
+                .SetProcessWorkingDirectory(project.Directory) // Enforce the usage of the global.json on the project directory.
+                .SetProject(project)
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .SetProperty("TracerHomePath", TracerHomeDirectory)
