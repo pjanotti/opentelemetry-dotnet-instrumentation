@@ -76,12 +76,13 @@ partial class Build
 
             foreach (var project in projectsToRestore)
             {
-                DotNetRestoreSettings Restore(DotNetRestoreSettings s) =>
-                    s.SetProjectFile(project)
-                        .SetVerbosity(DotNetVerbosity.Normal)
-                        .SetProperty("configuration", BuildConfiguration.ToString())
-                        .SetPlatform(Platform)
-                        .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o => o.SetPackageDirectory(NuGetPackagesDirectory));
+                DotNetRestoreSettings Restore(DotNetRestoreSettings s) => s
+                    .SetProcessWorkingDirectory(project.Directory) // Required to ensure that any project with global.json is respected
+                    .SetProjectFile(project)
+                    .SetVerbosity(DotNetVerbosity.Normal)
+                    .SetProperty("configuration", BuildConfiguration.ToString())
+                    .SetPlatform(Platform)
+                    .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o => o.SetPackageDirectory(NuGetPackagesDirectory));
 
                 if (LibraryVersion.Versions.TryGetValue(project.Name, out var libraryVersions))
                 {
