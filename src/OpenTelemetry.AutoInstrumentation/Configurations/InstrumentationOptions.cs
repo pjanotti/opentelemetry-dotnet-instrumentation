@@ -1,18 +1,5 @@
-// <copyright file="InstrumentationOptions.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 namespace OpenTelemetry.AutoInstrumentation.Configurations;
 
@@ -24,10 +11,26 @@ internal class InstrumentationOptions
     internal InstrumentationOptions(Configuration configuration)
     {
         GraphQLSetDocument = configuration.GetBool(ConfigurationKeys.Traces.InstrumentationOptions.GraphQLSetDocument) ?? false;
+        SqlClientSetDbStatementForText = configuration.GetBool(ConfigurationKeys.Traces.InstrumentationOptions.SqlClientSetDbStatementForText) ?? false;
+#if NET6_0_OR_GREATER
+        EntityFrameworkCoreSetDbStatementForText = configuration.GetBool(ConfigurationKeys.Traces.InstrumentationOptions.EntityFrameworkCoreSetDbStatementForText) ?? false;
+#endif
     }
 
     /// <summary>
     /// Gets a value indicating whether GraphQL query can be passed as a Document tag.
     /// </summary>
     public bool GraphQLSetDocument { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether text query in SQL Client can be passed as a db.statement tag.
+    /// </summary>
+    public bool SqlClientSetDbStatementForText { get; }
+
+#if NET6_0_OR_GREATER
+    /// <summary>
+    /// Gets a value indicating whether text query in Entity Framework Core can be passed as a db.statement tag.
+    /// </summary>
+    public bool EntityFrameworkCoreSetDbStatementForText { get; }
+#endif
 }

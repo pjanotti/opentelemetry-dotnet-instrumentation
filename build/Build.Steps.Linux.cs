@@ -16,8 +16,25 @@ partial class Build
             var buildDirectory = NativeProfilerProject.Directory / "build";
             buildDirectory.CreateDirectory();
 
+            var (major, minor, patch) = VersionHelper.GetVersionParts();
+
             CMake.Value(
-                arguments: $"../ -DCMAKE_BUILD_TYPE=Release",
+                arguments: $"../ -DCMAKE_BUILD_TYPE=Release -DOTEL_AUTO_VERSION={VersionHelper.GetVersionWithoutSuffixes()} -DOTEL_AUTO_VERSION_MAJOR={major} -DOTEL_AUTO_VERSION_MINOR={minor} -DOTEL_AUTO_VERSION_PATCH={patch}",
+                workingDirectory: buildDirectory);
+            Make.Value(
+                arguments: $"",
+                workingDirectory: buildDirectory);
+        });
+
+    Target CompileNativeDependenciesForManagedTestsLinux => _ => _
+        .Unlisted()
+        .After(CreateRequiredDirectories)
+        .OnlyWhenStatic(() => IsLinux)
+        .Executes(() =>
+        {
+            var buildDirectory = Solution.GetContinuousProfilerNativeDep().Directory.ToString();
+            CMake.Value(
+                arguments: "-S .",
                 workingDirectory: buildDirectory);
             Make.Value(
                 arguments: $"",
@@ -42,10 +59,11 @@ partial class Build
         {
             // Copy Native file
             var source = NativeProfilerProject.Directory / "build" / "bin" / $"{NativeProfilerProject.Name}.so";
+            var platform = Platform.ToString().ToLowerInvariant();
             string clrProfilerDirectoryName = Environment.GetEnvironmentVariable("OS_TYPE") switch
             {
-                "linux-musl" => "linux-musl-x64",
-                _ => "linux-x64"
+                "linux-musl" => $"linux-musl-{platform}",
+                _ => $"linux-{platform}"
             };
 
             var dest = TracerHomeDirectory / clrProfilerDirectoryName;

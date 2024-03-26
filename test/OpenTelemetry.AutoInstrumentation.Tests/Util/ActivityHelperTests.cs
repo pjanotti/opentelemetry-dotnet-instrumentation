@@ -1,23 +1,10 @@
-// <copyright file="ActivityHelperTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
 using FluentAssertions;
 using FluentAssertions.Execution;
-using Moq;
+using NSubstitute;
 using OpenTelemetry.AutoInstrumentation.Tagging;
 using OpenTelemetry.AutoInstrumentation.Util;
 using Xunit;
@@ -71,7 +58,7 @@ public class ActivityHelperTests
     {
         const ActivitySource? activitySource = null;
 
-        using var activity = activitySource.StartActivityWithTags("test-operation", ActivityKind.Internal, Mock.Of<ITags>());
+        using var activity = activitySource.StartActivityWithTags("test-operation", ActivityKind.Internal, Substitute.For<ITags>());
 
         activity.Should().BeNull();
     }
@@ -81,7 +68,7 @@ public class ActivityHelperTests
     {
         using var activitySource = new ActivitySource("test-source");
 
-        using var activity = activitySource.StartActivityWithTags("test-operation", ActivityKind.Internal, Mock.Of<ITags>());
+        using var activity = activitySource.StartActivityWithTags("test-operation", ActivityKind.Internal, Substitute.For<ITags>());
 
         using (new AssertionScope())
         {
@@ -98,14 +85,14 @@ public class ActivityHelperTests
     [InlineData(ActivityKind.Consumer)]
     public void StartActivityWithTags_ReturnsActivity_WhenThereIsActivityListener(ActivityKind kind)
     {
-        var tagsMock = new Mock<ITags>();
-        tagsMock.Setup(x => x.GetAllTags()).Returns(new List<KeyValuePair<string, string>>());
+        var tagsMock = Substitute.For<ITags>();
+        tagsMock.GetAllTags().Returns(new List<KeyValuePair<string, string>>());
 
         using var activitySource = new ActivitySource("test-source");
 
         using var listener = CreateActivityListener(activitySource);
 
-        using var activity = activitySource.StartActivityWithTags("test-operation", kind, tagsMock.Object);
+        using var activity = activitySource.StartActivityWithTags("test-operation", kind, tagsMock);
 
         using (new AssertionScope())
         {
@@ -124,16 +111,16 @@ public class ActivityHelperTests
             new("key2", "value2")
         };
 
-        var tagsMock = new Mock<ITags>();
-        tagsMock.Setup(x => x.GetAllTags()).Returns(tags);
+        var tagsMock = Substitute.For<ITags>();
+        tagsMock.GetAllTags().Returns(tags);
 
         using var activitySource = new ActivitySource("test-source");
 
         using var listener = CreateActivityListener(activitySource);
 
-        using var activity = activitySource.StartActivityWithTags("test-operation", ActivityKind.Internal, tagsMock.Object);
+        using var activity = activitySource.StartActivityWithTags("test-operation", ActivityKind.Internal, tagsMock);
 
-        tagsMock.Setup(x => x.GetAllTags()).Returns(tags);
+        tagsMock.GetAllTags().Returns(tags);
 
         using (new AssertionScope())
         {

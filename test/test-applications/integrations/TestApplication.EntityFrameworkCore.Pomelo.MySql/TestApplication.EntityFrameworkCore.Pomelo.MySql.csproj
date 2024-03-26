@@ -2,14 +2,21 @@
 
   <PropertyGroup>
     <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <TargetFrameworks Condition=" '$(IsCentos)' == '' ">net8.0;$(TargetFrameworks)</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(LibraryVersion)" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="$(LibraryVersion)" Condition=" '$(LibraryVersion)' != '' or '$(TargetFramework)' == 'net8.0' "/>
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" VersionOverride="7.0.0" Condition=" '$(LibraryVersion)' == '' and '$(TargetFramework)' != 'net8.0' "/>
 
-    <!-- Microsoft.Extensions.Configuration.Abstractions is needed to bump reference to 7.0.0
+    <!-- Microsoft.Extensions.Configuration.Abstractions, Microsoft.Extensions.Logging.Abstractions,
+    Microsoft.Extensions.Options, and Microsoft.Extensions.DependencyInjection
+    are needed to bump reference to 8.0.0
     some versions of Pomelo.EntityFrameworkCore.MySql brings to old references -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" VersionOverride="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" VersionOverride="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="8.0.0" />
   </ItemGroup>
 
 </Project>

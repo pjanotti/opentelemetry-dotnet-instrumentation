@@ -1,23 +1,10 @@
-// <copyright file="ConfigurationTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Collections.Specialized;
 using FluentAssertions;
 using FluentAssertions.Execution;
-using Moq;
+using NSubstitute;
 using OpenTelemetry.AutoInstrumentation.Configurations;
 using Xunit;
 
@@ -120,10 +107,10 @@ public class ConfigurationTests
     [Fact]
     public void ParseEmptyAsNull_CompositeConfigurationSource()
     {
-        var mockSource = new Mock<IConfigurationSource>();
-        mockSource.Setup(x => x.GetString(It.Is<string>(key => key == "TEST_NULL_VALUE"))).Returns<string>(_ => null);
-        mockSource.Setup(x => x.GetString(It.Is<string>(key => key == "TEST_EMPTY_VALUE"))).Returns<string>(_ => string.Empty);
-        var compositeSource = new Configuration(true, mockSource.Object);
+        var mockSource = Substitute.For<IConfigurationSource>();
+        mockSource.GetString(Arg.Is<string>(key => key == "TEST_NULL_VALUE")).Returns(_ => null);
+        mockSource.GetString(Arg.Is<string>(key => key == "TEST_EMPTY_VALUE"))!.Returns<string>(_ => string.Empty);
+        var compositeSource = new Configuration(true, mockSource);
 
         using (new AssertionScope())
         {

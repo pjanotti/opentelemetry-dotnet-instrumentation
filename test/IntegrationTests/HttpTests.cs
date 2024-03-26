@@ -1,18 +1,5 @@
-// <copyright file="HttpTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 #if NET6_0_OR_GREATER
 using FluentAssertions;
@@ -50,7 +37,11 @@ public class HttpTests : TestHelper
             return true;
         });
         Span? serverSpan = null;
+#if NET7_0_OR_GREATER
+        collector.Expect("Microsoft.AspNetCore", span =>
+#else
         collector.Expect("OpenTelemetry.Instrumentation.AspNetCore", span =>
+#endif
         {
             serverSpan = span;
             return true;
@@ -82,8 +73,20 @@ public class HttpTests : TestHelper
     {
         using var collector = new MockMetricsCollector(Output);
         SetExporter(collector);
-        collector.Expect("OpenTelemetry.Instrumentation.Http");
+#if NET8_0_OR_GREATER
+        collector.Expect("System.Net.Http");
+        collector.Expect("System.Net.NameResolution");
+        collector.Expect("Microsoft.AspNetCore.Hosting");
+        collector.Expect("Microsoft.AspNetCore.Server.Kestrel");
+        collector.Expect("Microsoft.AspNetCore.Http.Connections");
+        collector.Expect("Microsoft.AspNetCore.Routing");
+        collector.Expect("Microsoft.AspNetCore.Diagnostics");
+        collector.Expect("Microsoft.AspNetCore.RateLimiting");
+        collector.ExpectAdditionalEntries(x => x.All(m => m.InstrumentationScopeName != "OpenTelemetry.Instrumentation.AspNetCore" && m.InstrumentationScopeName != "OpenTelemetry.Instrumentation.Http"));
+#else
         collector.Expect("OpenTelemetry.Instrumentation.AspNetCore");
+        collector.Expect("OpenTelemetry.Instrumentation.Http");
+#endif
 
         RunTestApplication();
 

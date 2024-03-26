@@ -1,19 +1,8 @@
-// <copyright file="ApplicationInExcludeListRule.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
+using OpenTelemetry.AutoInstrumentation.Helpers;
 using OpenTelemetry.AutoInstrumentation.Logging;
 
 namespace OpenTelemetry.AutoInstrumentation.RulesEngine;
@@ -30,19 +19,40 @@ internal class ApplicationInExcludeListRule : Rule
 
     internal override bool Evaluate()
     {
-        var applicationName = GetApplicationName();
-
-        if (IsApplicationInExcludeList(applicationName))
+        var appDomainName = GetAppDomainName();
+        if (appDomainName.Equals("dotnet", StringComparison.InvariantCultureIgnoreCase))
         {
-            Logger.Information($"Rule Engine: {applicationName} is in the exclusion list. Skipping initialization.");
+            Logger.Information($"Rule Engine: AppDomain name is dotnet. Skipping initialization.");
             return false;
         }
 
-        Logger.Debug($"Rule Engine: {applicationName} is not in the exclusion list. ApplicationInExcludeListRule evaluation success.");
+        var processModuleName = GetProcessModuleName();
+        if (GetExcludedApplicationNames().Contains(processModuleName, StringComparer.InvariantCultureIgnoreCase))
+        {
+            Logger.Information($"Rule Engine: {processModuleName} is in the exclusion list. Skipping initialization.");
+            return false;
+        }
+
+        Logger.Debug(
+            "Rule Engine: {0} is not in the exclusion list. ApplicationInExcludeListRule evaluation success.",
+            processModuleName);
         return true;
     }
 
-    private static string GetApplicationName()
+    private static string GetProcessModuleName()
+    {
+        try
+        {
+            return Process.GetCurrentProcess().MainModule.ModuleName;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Error getting Process.MainModule.ModuleName: {ex}");
+            return string.Empty;
+        }
+    }
+
+    private static string GetAppDomainName()
     {
         try
         {
@@ -55,16 +65,11 @@ internal class ApplicationInExcludeListRule : Rule
         }
     }
 
-    private static bool IsApplicationInExcludeList(string applicationName)
-    {
-        return GetExcludedApplicationNames().Contains(applicationName);
-    }
-
-    private static List<string> GetExcludedApplicationNames()
+    private static ICollection<string> GetExcludedApplicationNames()
     {
         var excludedProcesses = new List<string>();
 
-        var environmentValue = GetEnvironmentVariable("OTEL_DOTNET_AUTO_EXCLUDE_PROCESSES");
+        var environmentValue = EnvironmentHelper.GetEnvironmentVariable("OTEL_DOTNET_AUTO_EXCLUDE_PROCESSES");
 
         if (environmentValue == null)
         {
@@ -80,18 +85,5 @@ internal class ApplicationInExcludeListRule : Rule
         }
 
         return excludedProcesses;
-    }
-
-    private static string? GetEnvironmentVariable(string variableName)
-    {
-        try
-        {
-            return Environment.GetEnvironmentVariable(variableName);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"Error getting environment variable {variableName}: {ex}");
-            return null;
-        }
     }
 }

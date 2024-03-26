@@ -1,18 +1,5 @@
-// <copyright file="EnvironmentConfigurationMetricHelper.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
 using OpenTelemetry.AutoInstrumentation.Loading;
@@ -37,11 +24,11 @@ internal static class EnvironmentConfigurationMetricHelper
             _ = enabledMeter switch
             {
 #if NETFRAMEWORK
-                MetricInstrumentation.AspNet => Wrappers.AddAspNetInstrumentation(builder, lazyInstrumentationLoader),
+                MetricInstrumentation.AspNet => Wrappers.AddAspNetInstrumentation(builder, lazyInstrumentationLoader, pluginManager),
 #endif
                 MetricInstrumentation.HttpClient => Wrappers.AddHttpClientInstrumentation(builder, lazyInstrumentationLoader),
                 MetricInstrumentation.NetRuntime => Wrappers.AddRuntimeInstrumentation(builder, pluginManager),
-                MetricInstrumentation.Process => Wrappers.AddProcessInstrumentation(builder, pluginManager),
+                MetricInstrumentation.Process => Wrappers.AddProcessInstrumentation(builder),
                 MetricInstrumentation.NServiceBus => builder.AddMeter("NServiceBus.Core"),
 #if NET6_0_OR_GREATER
                 MetricInstrumentation.AspNetCore => Wrappers.AddAspNetCoreInstrumentation(builder, lazyInstrumentationLoader),
@@ -63,7 +50,7 @@ internal static class EnvironmentConfigurationMetricHelper
     {
         if (settings.ConsoleExporterEnabled)
         {
-            Wrappers.AddConsoleExporter(builder, settings, pluginManager);
+            Wrappers.AddConsoleExporter(builder, pluginManager);
         }
 
         return settings.MetricExporter switch
@@ -84,9 +71,9 @@ internal static class EnvironmentConfigurationMetricHelper
         // Meters
 #if NETFRAMEWORK
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static MeterProviderBuilder AddAspNetInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static MeterProviderBuilder AddAspNetInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
         {
-            DelayedInitialization.Metrics.AddAspNet(lazyInstrumentationLoader);
+            DelayedInitialization.Metrics.AddAspNet(lazyInstrumentationLoader, pluginManager);
             return builder.AddMeter("OpenTelemetry.Instrumentation.AspNet");
         }
 #endif
@@ -95,6 +82,18 @@ internal static class EnvironmentConfigurationMetricHelper
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static MeterProviderBuilder AddAspNetCoreInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader)
         {
+            if (Environment.Version.Major >= 8)
+            {
+                // AspNetCore has build in support for metrics in .NET8. Executing OpenTelemetry.Instrumentation.AspNetCore in this case leads to duplicated metrics.
+                return builder
+                    .AddMeter("Microsoft.AspNetCore.Hosting")
+                    .AddMeter("Microsoft.AspNetCore.Server.Kestrel")
+                    .AddMeter("Microsoft.AspNetCore.Http.Connections")
+                    .AddMeter("Microsoft.AspNetCore.Routing")
+                    .AddMeter("Microsoft.AspNetCore.Diagnostics")
+                    .AddMeter("Microsoft.AspNetCore.RateLimiting");
+            }
+
             DelayedInitialization.Metrics.AddAspNetCore(lazyInstrumentationLoader);
             return builder.AddMeter("OpenTelemetry.Instrumentation.AspNetCore");
         }
@@ -103,8 +102,17 @@ internal static class EnvironmentConfigurationMetricHelper
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static MeterProviderBuilder AddHttpClientInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader)
         {
-            DelayedInitialization.Metrics.AddHttpClient(lazyInstrumentationLoader);
+#if NET6_0_OR_GREATER
+            if (Environment.Version.Major >= 8)
+            {
+                // HTTP has build in support for metrics in .NET8. Executing OpenTelemetry.Instrumentation.Http in this case leads to duplicated metrics.
+                return builder
+                    .AddMeter("System.Net.Http")
+                    .AddMeter("System.Net.NameResolution");
+            }
+#endif
 
+            DelayedInitialization.Metrics.AddHttpClient(lazyInstrumentationLoader);
             return builder.AddMeter("OpenTelemetry.Instrumentation.Http");
         }
 
@@ -115,7 +123,7 @@ internal static class EnvironmentConfigurationMetricHelper
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static MeterProviderBuilder AddProcessInstrumentation(MeterProviderBuilder builder, PluginManager pluginManager)
+        public static MeterProviderBuilder AddProcessInstrumentation(MeterProviderBuilder builder)
         {
             return builder.AddProcessInstrumentation();
         }
@@ -123,7 +131,7 @@ internal static class EnvironmentConfigurationMetricHelper
         // Exporters
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static MeterProviderBuilder AddConsoleExporter(MeterProviderBuilder builder, MetricSettings settings, PluginManager pluginManager)
+        public static MeterProviderBuilder AddConsoleExporter(MeterProviderBuilder builder, PluginManager pluginManager)
         {
             return builder.AddConsoleExporter((consoleExporterOptions, metricReaderOptions) =>
             {

@@ -1,18 +1,5 @@
-// <copyright file="SettingsTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -71,6 +58,10 @@ public class SettingsTests : IDisposable
 
             // Instrumentation options tests
             settings.InstrumentationOptions.GraphQLSetDocument.Should().BeFalse();
+            settings.InstrumentationOptions.SqlClientSetDbStatementForText.Should().BeFalse();
+#if NET6_0_OR_GREATER
+            settings.InstrumentationOptions.EntityFrameworkCoreSetDbStatementForText.Should().BeFalse();
+#endif
         }
     }
 
@@ -198,7 +189,7 @@ public class SettingsTests : IDisposable
     [InlineData("b3", new[] { Propagator.B3Single })]
     [InlineData("not-supported,b3", new Propagator[] { Propagator.B3Single })]
     [InlineData("tracecontext,baggage,b3multi,b3", new[] { Propagator.W3CTraceContext, Propagator.W3CBaggage, Propagator.B3Multi, Propagator.B3Single })]
-    internal void Propagators_SupportedValues(string propagators, Propagator[] expectedPropagators)
+    internal void Propagators_SupportedValues(string? propagators, Propagator[] expectedPropagators)
     {
         Environment.SetEnvironmentVariable(ConfigurationKeys.Sdk.Propagators, propagators);
 
@@ -221,7 +212,9 @@ public class SettingsTests : IDisposable
 #if NETFRAMEWORK
     [InlineData("ASPNET", TracerInstrumentation.AspNet)]
 #endif
+#if NET6_0_OR_GREATER
     [InlineData("GRAPHQL", TracerInstrumentation.GraphQL)]
+#endif
     [InlineData("HTTPCLIENT", TracerInstrumentation.HttpClient)]
     [InlineData("MONGODB", TracerInstrumentation.MongoDB)]
 #if NET6_0_OR_GREATER
@@ -231,6 +224,9 @@ public class SettingsTests : IDisposable
     [InlineData("NPGSQL", TracerInstrumentation.Npgsql)]
     [InlineData("SQLCLIENT", TracerInstrumentation.SqlClient)]
     [InlineData("GRPCNETCLIENT", TracerInstrumentation.GrpcNetClient)]
+#if NETFRAMEWORK
+    [InlineData("WCFSERVICE", TracerInstrumentation.WcfService)]
+#endif
 #if NET6_0_OR_GREATER
     [InlineData("MASSTRANSIT", TracerInstrumentation.MassTransit)]
 #endif
@@ -241,6 +237,11 @@ public class SettingsTests : IDisposable
     [InlineData("ENTITYFRAMEWORKCORE", TracerInstrumentation.EntityFrameworkCore)]
     [InlineData("ASPNETCORE", TracerInstrumentation.AspNetCore)]
 #endif
+    [InlineData("WCFCLIENT", TracerInstrumentation.WcfClient)]
+    [InlineData("MYSQLCONNECTOR", TracerInstrumentation.MySqlConnector)]
+    [InlineData("AZURE", TracerInstrumentation.Azure)]
+    [InlineData("ELASTICTRANSPORT", TracerInstrumentation.ElasticTransport)]
+    [InlineData("KAFKA", TracerInstrumentation.Kafka)]
     internal void TracerSettings_Instrumentations_SupportedValues(string tracerInstrumentation, TracerInstrumentation expectedTracerInstrumentation)
     {
         Environment.SetEnvironmentVariable(ConfigurationKeys.Traces.TracesInstrumentationEnabled, "false");
@@ -317,7 +318,7 @@ public class SettingsTests : IDisposable
     [InlineData("http/protobuf", null)]
     [InlineData("grpc", null)]
     [InlineData("nonExistingProtocol", null)]
-    internal void OtlpExportProtocol_DependsOnCorrespondingEnvVariable(string otlpProtocol, OtlpExportProtocol? expectedOtlpExportProtocol)
+    internal void OtlpExportProtocol_DependsOnCorrespondingEnvVariable(string? otlpProtocol, OtlpExportProtocol? expectedOtlpExportProtocol)
     {
         Environment.SetEnvironmentVariable(ConfigurationKeys.ExporterOtlpProtocol, otlpProtocol);
 
@@ -331,7 +332,7 @@ public class SettingsTests : IDisposable
     [InlineData("true", true)]
     [InlineData("false", false)]
     [InlineData(null, false)]
-    internal void FlushOnUnhandledException_DependsOnCorrespondingEnvVariable(string flushOnUnhandledException, bool expectedValue)
+    internal void FlushOnUnhandledException_DependsOnCorrespondingEnvVariable(string? flushOnUnhandledException, bool expectedValue)
     {
         Environment.SetEnvironmentVariable(ConfigurationKeys.FlushOnUnhandledException, flushOnUnhandledException);
 
@@ -341,7 +342,13 @@ public class SettingsTests : IDisposable
     }
 
     [Theory]
+#if NET6_0_OR_GREATER
     [InlineData("CONTAINER", ResourceDetector.Container)]
+#endif
+    [InlineData("AZUREAPPSERVICE", ResourceDetector.AzureAppService)]
+    [InlineData("PROCESSRUNTIME", ResourceDetector.ProcessRuntime)]
+    [InlineData("PROCESS", ResourceDetector.Process)]
+    [InlineData("HOST", ResourceDetector.Host)]
     internal void GeneralSettings_Instrumentations_SupportedValues(string resourceDetector, ResourceDetector expectedResourceDetector)
     {
         Environment.SetEnvironmentVariable(ConfigurationKeys.ResourceDetectorEnabled, "false");

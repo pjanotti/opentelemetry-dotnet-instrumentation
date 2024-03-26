@@ -7,15 +7,16 @@ public static class ProjectsHelper
     private const string NativeProjectMarker = "Native"; // Contains word Native
     private const string TestsProjectMarker = "Tests"; // Ends with word Tests
     private const string NetFrameworkMarker = ".NetFramework"; // Ends with word .NetFramework
+    private const string NativeDepMarker = ".NativeDep"; // Ends with word .NativeDep
 
     private const string CoreProjectSelector = "OpenTelemetry.AutoInstrumentation*";
     private const string TestApplicationSelector = "TestApplication.*";
     private const string TestLibrarySelector = "TestLibrary.*";
 
-    private readonly static AbsolutePath SrcDirectory = NukeBuild.RootDirectory / "src";
-    private readonly static AbsolutePath TestDirectory = NukeBuild.RootDirectory / "test";
-    private readonly static AbsolutePath TestIntegrationApps = TestDirectory / "test-applications" / "integrations";
-    private readonly static AbsolutePath TestNuGetPackagesApps = TestDirectory / "test-applications" / "nuget-packages";
+    private static readonly AbsolutePath SrcDirectory = NukeBuild.RootDirectory / "src";
+    private static readonly AbsolutePath TestDirectory = NukeBuild.RootDirectory / "test";
+    private static readonly AbsolutePath TestIntegrationApps = TestDirectory / "test-applications" / "integrations";
+    private static readonly AbsolutePath TestNuGetPackagesApps = TestDirectory / "test-applications" / "nuget-packages";
 
     public static IEnumerable<Project> GetManagedSrcProjects(this Solution solution)
     {
@@ -85,7 +86,12 @@ public static class ProjectsHelper
         return solution.GetProjectByName(Projects.Mocks.AutoInstrumentationMock);
     }
 
-    public static IEnumerable<Project> GetWindowsOnlyTestApplications(this Solution solution)
+    public static Project GetContinuousProfilerNativeDep(this Solution solution)
+    {
+        return solution.GetProjectByName(Projects.Tests.Applications.ContinuousProfilerNativeDep);
+    }
+
+    public static IEnumerable<Project> GetNetFrameworkOnlyTestApplications(this Solution solution)
     {
         return solution
             .GetIntegrationTestApplications()
@@ -96,7 +102,8 @@ public static class ProjectsHelper
     {
         return solution
             .GetIntegrationTestApplications()
-            .Where(x => !x.Name.EndsWith(NetFrameworkMarker));
+            .Where(x => !x.Name.EndsWith(NetFrameworkMarker))
+            .Where(x => !x.Name.EndsWith(NativeDepMarker));
     }
 
     public static Project GetNativeTestProject(this Solution solution)

@@ -4,6 +4,7 @@ using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 using Nuke.Common.Tools.NuGet;
+using Nuke.Common.Utilities.Collections;
 using static Nuke.Common.IO.FileSystemTasks;
 using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
@@ -14,6 +15,7 @@ partial class Build
     Target BuildNuGetPackages => _ => _
         .Description(
             "Builds the NuGet packages of the project assuming that any necessary build artifacts were already downloaded.")
+        .DependsOn(CleanAutoInstrumentationNuGetPackagesFromLocalCaches)
         .DependsOn(BuildManagedSrcNuGetPackages)
         .DependsOn(SetupRuntimeNativeFolderForNuGetPackage)
         .DependsOn(BuildNuSpecNuGetPackages);
@@ -34,7 +36,6 @@ partial class Build
                 DotNetPack(x => x
                     .SetProject(project)
                     .SetConfiguration(BuildConfiguration)
-                    .SetVersionSuffix(NuGetVersionSuffix)
                     .SetOutputDirectory(NuGetArtifactsDirectory));
             }
         });
@@ -49,8 +50,10 @@ partial class Build
 
             var requiredArtifacts = new string[]
             {
-                "bin-alpine/linux-musl-x64",
-                "bin-centos/linux-x64",
+                "bin-alpine-x64/linux-musl-x64",
+                "bin-alpine-arm64/linux-musl-arm64",
+                "bin-ubuntu-20.04/linux-x64",
+                "bin-actuated-arm64-4cpu-8gb/linux-arm64",
                 "bin-macos-11/osx-x64",
                 "bin-windows-2022/win-x64",
                 "bin-windows-2022/win-x86"
@@ -68,6 +71,37 @@ partial class Build
             }
         });
 
+    Target CleanAutoInstrumentationNuGetPackagesFromLocalCaches => _ => _
+        .Unlisted()
+        .Description(
+            "Remove the AutoInstrumentation packages from local caches ensuring that the latest locally built versions are used.")
+        .Before(BuildManagedSrcNuGetPackages)
+        .Before(BuildNuSpecNuGetPackages)
+        .Executes(() =>
+        {
+            const string autoInstrumentationGlob = "opentelemetry.autoinstrumentation*"; // NuGet lowers the case of the directory.
+
+            // This is mail fail if any dotnet tasks are using the packages on the background, reduce the risk by
+            // shutting down any build servers. However, this doesn't prevent tools like VS and VS Code of holding
+            // the BuildTasks package if they are doing background builds that reference the package.
+            DotNet("dotnet build-server shutdown");
+
+            // Clean the default local cache.
+            var output = DotNet("dotnet nuget locals global-packages --list", RootDirectory);
+            foreach (var line in output)
+            {
+                AbsolutePath packagesDir = Path.GetFullPath(line.Text[("global-packages: ".Length)..]);
+                var autoInstrumentationPackagesDirectories = packagesDir.GlobDirectories(autoInstrumentationGlob);
+                autoInstrumentationPackagesDirectories.ForEach(d => d.DeleteDirectory());
+            }
+
+            // Clean the NuGet test applications cache.
+            var nugetTestAppsPackagesDir =
+                RootDirectory / "test" / "test-applications" / "nuget-packages" / "packages";
+            var nugetTestAppsAutoInstrumentationPackagesDirectories = nugetTestAppsPackagesDir.GlobDirectories(autoInstrumentationGlob);
+            nugetTestAppsAutoInstrumentationPackagesDirectories.ForEach(d => d.DeleteDirectory());
+        });
+
     Target BuildNuSpecNuGetPackages => _ => _
         .Description("Build the NuGet packages specified by nuget/**/*.nuspec projects.")
         .After(SetupRuntimeNativeFolderForNuGetPackage)
@@ -79,11 +113,14 @@ partial class Build
             // Keeping common values here and using them as properties
             var nuspecCommonProperties = new Dictionary<string, object>
             {
-                { "NoWarn", "NU5128" },
+                // NU5104: "A stable release of a package should not have a prerelease dependency."
+                // NU5128: "Some target frameworks declared in the dependencies group of the nuspec and the lib/ref folder do not have exact matches in the other location."
+                { "NoWarn", "NU5104;NU5128" },
                 { "NuGetLicense", "Apache-2.0" },
-                { "NuGetPackageVersion", $"{NuGetBaseVersionNumber}{NuGetVersionSuffix}" },
+                { "NuGetPackageVersion", VersionHelper.GetVersion() },
                 { "NuGetRequiredLicenseAcceptance", "true" },
-                { "OpenTelemetryAuthors", "OpenTelemetry Authors" }
+                { "OpenTelemetryAuthors", "OpenTelemetry Authors" },
+                { "CommitId", VersionHelper.GetCommitId() }
             };
 
             var nuspecSolutionFolder = Solution.GetSolutionFolder("nuget")
@@ -114,13 +151,28 @@ partial class Build
         .Description("Builds the TestApplications.* used by the NuGetPackagesTests")
         .Executes(() =>
         {
+            string MapToNet8RuntimeIdentifiers(string oldRuntimeIdentifier)
+            {
+#if NET8_0_OR_GREATER
+                return oldRuntimeIdentifier;
+#else
+                switch (oldRuntimeIdentifier)
+                {
+                    case "ubuntu.20.04-x64": return "linux-x64";
+                    case "osx.11.0-x64": return "osx-x64";
+                    case "win10-x64": return "win-x64";
+                }
+                throw new NotSupportedException($"{oldRuntimeIdentifier} is not supported. Extend MapToNet8RuntimeIdentifiers.");
+#endif
+            }
+
             foreach (var packagesTestApplicationProject in Solution.GetNuGetPackagesTestApplications())
             {
                 // Unlike the integration apps these require a restore step.
                 DotNetBuild(s => s
                     .SetProjectFile(packagesTestApplicationProject)
-                    .SetProperty("NuGetPackageVersion", $"{NuGetBaseVersionNumber}{NuGetVersionSuffix}")
-                    .SetRuntime(RuntimeInformation.RuntimeIdentifier)
+                    .SetProperty("NuGetPackageVersion", VersionHelper.GetVersion())
+                    .SetRuntime(MapToNet8RuntimeIdentifiers(RuntimeInformation.RuntimeIdentifier))
                     .SetConfiguration(BuildConfiguration)
                     .SetPlatform(Platform));
             }
@@ -142,7 +194,7 @@ partial class Build
                     .SetBlameHangTimeout("5m")
                     .EnableTrxLogOutput(GetResultsDirectory(nugetPackagesTestProject))
                     .SetTargetPath(nugetPackagesTestProject)
-                    .DisableRestore()
+                    .SetRestore(!NoRestore)
                     .RunTests()
                 );
             }

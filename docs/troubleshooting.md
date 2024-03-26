@@ -54,6 +54,23 @@ The most common reason is that the instrumented application
 has no permissions to load the OpenTelemetry .NET Automatic Instrumentation
 assemblies.
 
+### Could not install package 'OpenTelemetry.AutoInstrumentation.Runtime.Native'
+
+#### Symptoms
+
+When adding the NuGet packages to your project you get an error message similar
+to:
+
+```txt
+Could not install package 'OpenTelemetry.AutoInstrumentation.Runtime.Native 1.4.0'. You are trying to install this package into a project that targets '.NETFramework,Version=v4.7.2', but the package does not contain any assembly references or content files that are compatible with that framework. For more information, contact the package author.
+```
+
+#### Solution
+
+The NuGet packages don't support old-style `csproj` projects. Either deploy the
+automatic instrumentation to the [machine instead of using NuGet packages](./README.md###powershell-module),
+or migrate your project to the SDK style `csproj`.
+
 ### Performance issues
 
 #### Symptoms
@@ -129,6 +146,13 @@ To handle dependency versions conflicts,
 update the instrumented application's project references
 to use the same versions as OpenTelemetry .NET Automatic Instrumentation.
 
+A simple way to ensure that no such conflicts happen is to add the
+`OpenTelemetry.AutoInstrumentation` package to your application.
+For instructions about how to add it to your application, see
+[Using the OpenTelemetry.AutoInstrumentation NuGet packages](./using-the-nuget-packages.md#using-the-opentelemetryautoinstrumentation-nuget-packages)
+.
+
+Alternatively add only the conflicting packages to your project.
 The following dependencies are used by OpenTelemetry .NET Automatic Instrumentation:
 
 - [OpenTelemetry.AutoInstrumentation](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/src/OpenTelemetry.AutoInstrumentation/OpenTelemetry.AutoInstrumentation.csproj)
@@ -140,10 +164,16 @@ Find their versions in the following locations:
 - [src/Directory.Packages.props](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/src/Directory.Packages.props)
 - [src/OpenTelemetry.AutoInstrumentation.AdditionalDeps/Directory.Packages.props](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/src/OpenTelemetry.AutoInstrumentation.AdditionalDeps/Directory.Packages.props)
 
-By default, assembly references for .NET Framework applications are upgraded
+By default, assembly references for .NET Framework applications are redirected
 during runtime to the versions used by the automatic instrumentation.
 This behavior can be controlled through the [`OTEL_DOTNET_AUTO_NETFX_REDIRECT_ENABLED`](./config.md#additional-settings)
 setting.
+
+If the application already ships binding redirection for assemblies
+used by automatic instrumentation this automatic redirection may fail,
+see [#2833](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/2833).
+Check if any existing binding redirect prevent redirection to the versions
+listed at [netfx_assembly_redirection.h](../src/OpenTelemetry.AutoInstrumentation.Native/netfx_assembly_redirection.h).
 
 For the automatic redirection above to work there are two specific scenarios that
 require the assemblies used to instrument .NET Framework
@@ -156,9 +186,9 @@ of assemblies loaded as domain-neutral.
 different versions of some assemblies also shipped in the `netfx` folder.
 
 If you are having problems in one of the scenarios above run again the
-`Install-OpenTelemetryCore` command from the
-[PowerShell installation module](../OpenTelemetry.DotNet.Auto.psm1)
-to ensure that the required GAC installations are updated.
+`Install-OpenTelemetryCore` command from the PowerShell installation module
+`OpenTelemetry.DotNet.Auto.psm1` to ensure that the required GAC installations
+are updated.
 
 For more information about the GAC usage by the automatic instrumentation,
 see [here](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/1906#issuecomment-1376292814).
@@ -182,3 +212,26 @@ An assembly specified in the application dependencies manifest (OpenTelemetry.Au
 
 If you encounter an issue not listed on this page, see [General steps](#general-steps)
 to collect additional diagnostic information. This might help facilitate troubleshooting.
+
+### Runtime Store Assembly Version Conflicts
+
+#### Symptoms
+
+Applications may crash or behave unexpectedly due to version mismatches between
+the application's assemblies and those in the .NET runtime store. The
+RuntimeStoreDiagnosticRule in RuleEngine helps identify these mismatches by
+logging a warning if the application references a lower version than the runtime
+store.
+
+Sample Diagnostic Output:
+
+```plaintext
+[Warning] Rule Engine: Application references lower version of runtime store assembly C:\path\to\assembly.dll - 6.0.0.0.
+[Debug] Rule Engine: Runtime store assembly C:\path\to\assembly.dll validated successfully.
+```
+
+#### Solution
+
+For resolving runtime store assembly version conflicts, follow the same solution
+as outlined for [Assembly version conflicts](#assembly-version-conflicts) in
+this document.

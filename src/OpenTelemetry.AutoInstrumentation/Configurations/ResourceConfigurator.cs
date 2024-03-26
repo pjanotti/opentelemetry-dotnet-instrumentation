@@ -1,21 +1,14 @@
-// <copyright file="ResourceConfigurator.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
+using OpenTelemetry.ResourceDetectors.Azure;
+#if NET6_0_OR_GREATER
 using OpenTelemetry.ResourceDetectors.Container;
+#endif
+using OpenTelemetry.ResourceDetectors.Host;
+using OpenTelemetry.ResourceDetectors.Process;
+using OpenTelemetry.ResourceDetectors.ProcessRuntime;
 using OpenTelemetry.Resources;
 
 namespace OpenTelemetry.AutoInstrumentation.Configurations;
@@ -32,22 +25,23 @@ internal static class ResourceConfigurator
             .AddTelemetrySdk()
             .AddAttributes(new KeyValuePair<string, object>[]
             {
-                new(Constants.Tracer.AutoInstrumentationVersionName, Constants.Tracer.Version)
+                new(Constants.DistributionAttributes.TelemetryDistroNameAttributeName, Constants.DistributionAttributes.TelemetryDistroNameAttributeValue),
+                new(Constants.DistributionAttributes.TelemetryDistroVersionAttributeName, AutoInstrumentationVersion.Version)
             });
 
         foreach (var enabledResourceDetector in enabledResourceDetectors)
         {
             resourceBuilder = enabledResourceDetector switch
             {
+#if NET6_0_OR_GREATER
                 ResourceDetector.Container => Wrappers.AddContainerResourceDetector(resourceBuilder),
-                _ => resourceBuilder,
+#endif
+                ResourceDetector.AzureAppService => Wrappers.AddAzureAppServiceResourceDetector(resourceBuilder),
+                ResourceDetector.ProcessRuntime => Wrappers.AddProcessRuntimeResourceDetector(resourceBuilder),
+                ResourceDetector.Process => Wrappers.AddProcessResourceDetector(resourceBuilder),
+                ResourceDetector.Host => Wrappers.AddHostResourceDetector(resourceBuilder),
+                _ => resourceBuilder
             };
-        }
-
-        var pluginManager = Instrumentation.PluginManager;
-        if (pluginManager != null)
-        {
-            resourceBuilder.InvokePlugins(pluginManager);
         }
 
         var resource = resourceBuilder.Build();
@@ -57,15 +51,47 @@ internal static class ResourceConfigurator
             resourceBuilder.AddAttributes(new KeyValuePair<string, object>[] { new(ServiceNameAttribute, ServiceNameConfigurator.GetFallbackServiceName()) });
         }
 
+        var pluginManager = Instrumentation.PluginManager;
+        if (pluginManager != null)
+        {
+            resourceBuilder.InvokePlugins(pluginManager);
+        }
+
         return resourceBuilder;
     }
 
     private static class Wrappers
     {
+#if NET6_0_OR_GREATER
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static ResourceBuilder AddContainerResourceDetector(ResourceBuilder resourceBuilder)
         {
             return resourceBuilder.AddDetector(new ContainerResourceDetector());
+        }
+#endif
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static ResourceBuilder AddAzureAppServiceResourceDetector(ResourceBuilder resourceBuilder)
+        {
+            return resourceBuilder.AddDetector(new AppServiceResourceDetector());
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static ResourceBuilder AddProcessRuntimeResourceDetector(ResourceBuilder resourceBuilder)
+        {
+            return resourceBuilder.AddDetector(new ProcessRuntimeDetector());
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static ResourceBuilder AddProcessResourceDetector(ResourceBuilder resourceBuilder)
+        {
+            return resourceBuilder.AddDetector(new ProcessDetector());
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static ResourceBuilder AddHostResourceDetector(ResourceBuilder resourceBuilder)
+        {
+            return resourceBuilder.AddDetector(new HostDetector());
         }
     }
 }

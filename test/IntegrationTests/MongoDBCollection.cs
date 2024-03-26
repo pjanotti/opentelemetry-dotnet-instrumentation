@@ -1,20 +1,8 @@
-// <copyright file="MongoDBCollection.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using IntegrationTests.Helpers;
 using static IntegrationTests.Helpers.DockerFileHelper;
@@ -56,13 +44,7 @@ public class MongoDBFixture : IAsyncLifetime
 
     private async Task<IContainer> LaunchMongoContainerAsync(int port)
     {
-        var waitForOs =
-#if _WINDOWS
-         Wait.ForWindowsContainer();
-#else
-         Wait.ForUnixContainer();
-#endif
-
+        var waitForOs = await GetWaitForOSTypeAsync();
         var mongoContainersBuilder = new ContainerBuilder()
             .WithImage(MongoDBImage)
             .WithName($"mongo-db-{port}")
@@ -78,5 +60,18 @@ public class MongoDBFixture : IAsyncLifetime
     private async Task ShutdownMongoContainerAsync(IContainer container)
     {
         await container.DisposeAsync();
+    }
+
+    private async Task<IWaitForContainerOS> GetWaitForOSTypeAsync()
+    {
+#if _WINDOWS
+        var isWindowsEngine = await DockerSystemHelper.GetIsWindowsEngineEnabled();
+
+        return isWindowsEngine
+            ? Wait.ForWindowsContainer()
+            : Wait.ForUnixContainer();
+#else
+        return await Task.Run(Wait.ForUnixContainer);
+#endif
     }
 }

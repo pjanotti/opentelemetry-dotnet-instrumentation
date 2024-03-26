@@ -1,22 +1,8 @@
-// <copyright file="EnvironmentConfigurationTracerHelper.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
 using OpenTelemetry.AutoInstrumentation.Loading;
-using OpenTelemetry.AutoInstrumentation.Loading.Initializers;
 using OpenTelemetry.AutoInstrumentation.Plugins;
 using OpenTelemetry.Trace;
 
@@ -30,31 +16,45 @@ internal static class EnvironmentConfigurationTracerHelper
         TracerSettings settings,
         PluginManager pluginManager)
     {
+        // ensure WcfInitializer is added only once,
+        // it is needed when either WcfClient or WcfService instrumentations are enabled
+        // to initialize WcfInstrumentationOptions
+        var wcfInstrumentationAdded = false;
         foreach (var enabledInstrumentation in settings.EnabledInstrumentations)
         {
             _ = enabledInstrumentation switch
             {
 #if NETFRAMEWORK
                 TracerInstrumentation.AspNet => Wrappers.AddAspNetInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
+                TracerInstrumentation.WcfService => AddWcfIfNeeded(builder, pluginManager, lazyInstrumentationLoader, ref wcfInstrumentationAdded),
 #endif
                 TracerInstrumentation.GrpcNetClient => Wrappers.AddGrpcClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
                 TracerInstrumentation.HttpClient => Wrappers.AddHttpClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
                 TracerInstrumentation.Npgsql => builder.AddSource("Npgsql"),
-                TracerInstrumentation.SqlClient => Wrappers.AddSqlClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
-                TracerInstrumentation.Wcf => Wrappers.AddWcfInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
+                TracerInstrumentation.SqlClient => Wrappers.AddSqlClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
                 TracerInstrumentation.NServiceBus => builder.AddSource("NServiceBus.Core"),
                 TracerInstrumentation.Elasticsearch => builder.AddSource("Elastic.Clients.Elasticsearch.ElasticsearchClient"),
+                TracerInstrumentation.ElasticTransport => builder.AddSource("Elastic.Transport"),
                 TracerInstrumentation.Quartz => Wrappers.AddQuartzInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
                 TracerInstrumentation.MongoDB => builder.AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources"),
+                TracerInstrumentation.MySqlConnector => builder.AddSource("MySqlConnector"),
+                TracerInstrumentation.Azure => Wrappers.AddAzureInstrumentation(builder),
+                TracerInstrumentation.WcfClient => AddWcfIfNeeded(builder, pluginManager, lazyInstrumentationLoader, ref wcfInstrumentationAdded),
 #if NET6_0_OR_GREATER
                 TracerInstrumentation.AspNetCore => Wrappers.AddAspNetCoreInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
                 TracerInstrumentation.MassTransit => builder.AddSource("MassTransit"),
-                TracerInstrumentation.MySqlData => Wrappers.AddMySqlClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
+                TracerInstrumentation.MySqlData => builder.AddSource("connector-net"),
                 TracerInstrumentation.StackExchangeRedis => builder.AddSource("OpenTelemetry.Instrumentation.StackExchangeRedis"),
-                TracerInstrumentation.EntityFrameworkCore => Wrappers.AddEntityFrameworkCoreInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
+                TracerInstrumentation.EntityFrameworkCore => Wrappers.AddEntityFrameworkCoreInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
+                TracerInstrumentation.GraphQL => Wrappers.AddGraphQLInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
 #endif
                 _ => null
             };
+        }
+
+        if (settings.OpenTracingEnabled)
+        {
+            builder.AddOpenTracingShimSource();
         }
 
         builder
@@ -70,6 +70,23 @@ internal static class EnvironmentConfigurationTracerHelper
         }
 
         return builder;
+    }
+
+    private static TracerProviderBuilder AddWcfIfNeeded(
+        TracerProviderBuilder tracerProviderBuilder,
+        PluginManager pluginManager,
+        LazyInstrumentationLoader lazyInstrumentationLoader,
+        ref bool wcfInstrumentationAdded)
+    {
+        if (wcfInstrumentationAdded)
+        {
+            return tracerProviderBuilder;
+        }
+
+        Wrappers.AddWcfInstrumentation(tracerProviderBuilder, pluginManager, lazyInstrumentationLoader);
+        wcfInstrumentationAdded = true;
+
+        return tracerProviderBuilder;
     }
 
     private static TracerProviderBuilder SetSampler(this TracerProviderBuilder builder, TracerSettings settings)
@@ -151,24 +168,36 @@ internal static class EnvironmentConfigurationTracerHelper
         public static TracerProviderBuilder AddAspNetCoreInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
         {
             DelayedInitialization.Traces.AddAspNetCore(lazyInstrumentationLoader, pluginManager);
-            return builder
-                .AddSource("OpenTelemetry.Instrumentation.AspNetCore")
-                .AddLegacySource("Microsoft.AspNetCore.Hosting.HttpRequestIn");
+
+            if (Environment.Version.Major == 6)
+            {
+                return builder
+                    .AddSource("OpenTelemetry.Instrumentation.AspNetCore")
+                    .AddLegacySource("Microsoft.AspNetCore.Hosting.HttpRequestIn");
+            }
+
+            return builder.AddSource("Microsoft.AspNetCore");
         }
 
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddMySqlClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddGraphQLInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
-            DelayedInitialization.Traces.AddMySqlClient(lazyInstrumentationLoader, pluginManager);
+            DelayedInitialization.Traces.AddGraphQL(lazyInstrumentationLoader, pluginManager, tracerSettings);
 
-            return builder.AddSource("OpenTelemetry.Instrumentation.MySqlData");
+            return builder.AddSource("GraphQL");
         }
 #endif
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddSqlClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddAzureInstrumentation(TracerProviderBuilder builder)
         {
-            DelayedInitialization.Traces.AddSqlClient(lazyInstrumentationLoader, pluginManager);
+            AppContext.SetSwitch("Azure.Experimental.EnableActivitySource", true);
+            return builder.AddSource("Azure.*");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static TracerProviderBuilder AddSqlClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
+        {
+            DelayedInitialization.Traces.AddSqlClient(lazyInstrumentationLoader, pluginManager, tracerSettings);
 
             return builder.AddSource("OpenTelemetry.Instrumentation.SqlClient");
         }
@@ -196,9 +225,9 @@ internal static class EnvironmentConfigurationTracerHelper
 
 #if NET6_0_OR_GREATER
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddEntityFrameworkCoreInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddEntityFrameworkCoreInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
-            DelayedInitialization.Traces.AddEntityFrameworkCore(lazyInstrumentationLoader, pluginManager);
+            DelayedInitialization.Traces.AddEntityFrameworkCore(lazyInstrumentationLoader, pluginManager, tracerSettings);
 
             return builder.AddSource("OpenTelemetry.Instrumentation.EntityFrameworkCore");
         }

@@ -1,18 +1,5 @@
-// <copyright file="ResourceDetector.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 namespace OpenTelemetry.AutoInstrumentation.Configurations;
 
@@ -21,8 +8,30 @@ namespace OpenTelemetry.AutoInstrumentation.Configurations;
 /// </summary>
 internal enum ResourceDetector
 {
+#if NET6_0_OR_GREATER
     /// <summary>
     /// Container resource detector.
     /// </summary>
-    Container = 0
+    Container = 0,
+#endif
+
+    /// <summary>
+    /// Azure App Service resource detector.
+    /// </summary>
+    AzureAppService = 1,
+
+    /// <summary>
+    /// Process Runtime resource detector.
+    /// </summary>
+    ProcessRuntime = 2,
+
+    /// <summary>
+    /// Process resource detector.
+    /// </summary>
+    Process = 3,
+
+    /// <summary>
+    /// Host resource detector.
+    /// </summary>
+    Host = 4
 }

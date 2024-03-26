@@ -1,27 +1,17 @@
-// <copyright file="Program.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
+using System.Reflection;
 using System.ServiceModel;
 using System.ServiceModel.Channels;
-using static System.Net.WebRequestMethods;
 
 namespace TestApplication.Wcf.Client.NetFramework;
 
 internal static class Program
 {
+    private static readonly ActivitySource Source = new(Assembly.GetExecutingAssembly().GetName().Name, "1.0.0.0");
+
     public static async Task Main(string[] args)
     {
         string netTcpAddress;
@@ -40,11 +30,24 @@ internal static class Program
         }
         else
         {
-            throw new Exception("TestApplication.Wcf.Client.NetFramework application requires either 0 or exactly 2 arguments.");
+            throw new Exception(
+                "TestApplication.Wcf.Client.NetFramework application requires either 0 or exactly 2 arguments.");
         }
 
-        await CallService(netTcpAddress, new NetTcpBinding(SecurityMode.None)).ConfigureAwait(false);
+        using var parent = Source.StartActivity("Parent");
+        try
+        {
+            Console.WriteLine("=============NetTcp===============");
+            await CallService(netTcpAddress, new NetTcpBinding(SecurityMode.None)).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // netTcp fails on open when there is no endpoint
+        }
+
+        Console.WriteLine("=============Http===============");
         await CallService(httpAddress, new BasicHttpBinding()).ConfigureAwait(false);
+        using var sibling = Source.StartActivity("Sibling");
     }
 
     private static async Task CallService(string address, Binding binding)
@@ -53,20 +56,28 @@ internal static class Program
         // This code is not meant to illustrate best practices, only the
         // instrumentation.
         var client = new StatusServiceClient(binding, new EndpointAddress(new Uri(address)));
+        await client.OpenAsync().ConfigureAwait(false);
+
         try
         {
-            await client.OpenAsync().ConfigureAwait(false);
-
-            var statusRequest = new StatusRequest
+            try
             {
-                Status = Guid.NewGuid().ToString("N"),
-            };
+                Console.WriteLine("Task-based Asynchronous Pattern call");
+                var rq = new StatusRequest { Status = "1" };
+                var response = await client.PingAsync(rq).ConfigureAwait(false);
 
-            var time = DateTimeOffset.UtcNow.ToString("o");
-            var response = await client.PingAsync(
-                statusRequest).ConfigureAwait(false);
+                // Task.Yield() is required in order for successive calls
+                // not to timeout, this seems to be a known issue for e.g console apps
+                // making WCF sync calls after an async call
+                await Task.Yield();
 
-            Console.WriteLine($"[{time}] Sending request with status {statusRequest.Status}. Server returned: {response?.ServerTime:o}");
+                Console.WriteLine(
+                    $"[{DateTimeOffset.UtcNow:o}] Request with status {rq.Status}. Server returned: {response?.ServerTime:o}");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
         }
         finally
         {

@@ -407,14 +407,16 @@ enum MethodArgumentTypeFlag
     TypeFlagBoxedType = 0x04
 };
 
-struct FunctionMethodArgument
+// Represents a segment inside a larger signature (Method Signature / Local Var Signature) of
+// an Argument, Local or Return Value.
+struct TypeSignature
 {
     ULONG offset;
     ULONG length;
     PCCOR_SIGNATURE pbBase;
     mdToken GetTypeTok(ComPtr<IMetaDataEmit2>& pEmit, mdAssemblyRef corLibRef) const;
     WSTRING GetTypeTokName(ComPtr<IMetaDataImport2>& pImport) const;
-    int GetTypeFlags(unsigned& elementType) const;
+    std::tuple<unsigned, int> GetElementTypeAndFlags() const;
     ULONG GetSignature(PCCOR_SIGNATURE& data) const;
 };
 
@@ -425,8 +427,8 @@ private:
     unsigned len;
     ULONG numberOfTypeArguments = 0;
     ULONG numberOfArguments = 0;
-    FunctionMethodArgument ret{};
-    std::vector<FunctionMethodArgument> params;
+    TypeSignature returnValue{};
+    std::vector<TypeSignature> params;
 
 public:
     FunctionMethodSignature() : pbBase(nullptr), len(0)
@@ -449,11 +451,11 @@ public:
     {
         return HexStr(pbBase, len);
     }
-    FunctionMethodArgument GetRet() const
+    TypeSignature GetReturnValue() const
     {
-        return ret;
+        return returnValue;
     }
-    std::vector<FunctionMethodArgument> GetMethodArguments() const
+    const std::vector<TypeSignature>& GetMethodArguments() const
     {
         return params;
     }
@@ -465,6 +467,46 @@ public:
     CorCallingConvention CallingConvention() const
     {
         return CorCallingConvention(len == 0 ? 0 : pbBase[0]);
+    }
+    bool IsEmpty() const
+    {
+        return len == 0;
+    }
+};
+
+struct FunctionLocalSignature
+{
+private:
+    PCCOR_SIGNATURE            pbBase;
+    unsigned                   len;
+    ULONG                      numberOfLocals = 0;
+    std::vector<TypeSignature> locals;
+
+public:
+    FunctionLocalSignature() : pbBase(nullptr), len(0) {}
+    FunctionLocalSignature(PCCOR_SIGNATURE pb, unsigned cbBuffer, std::vector<TypeSignature>&& localsSigs)
+        : pbBase(pb)
+        , len(cbBuffer)
+        , numberOfLocals(static_cast<ULONG>(localsSigs.size()))
+        , locals(std::move(localsSigs))
+    {
+    }
+    ULONG NumberOfLocals() const
+    {
+        return numberOfLocals;
+    }
+    WSTRING str() const
+    {
+        return HexStr(pbBase, len);
+    }
+    const std::vector<TypeSignature>& GetMethodLocals() const
+    {
+        return locals;
+    }
+    static HRESULT TryParse(PCCOR_SIGNATURE pbBase, unsigned len, std::vector<TypeSignature>& locals);
+    bool           operator==(const FunctionLocalSignature& other) const
+    {
+        return memcmp(pbBase, other.pbBase, len);
     }
     bool IsEmpty() const
     {
@@ -587,6 +629,28 @@ HRESULT GetCorLibAssemblyRef(const ComPtr<IMetaDataAssemblyEmit>& assembly_emit,
 
 bool FindTypeDefByName(const trace::WSTRING instrumentationTargetMethodTypeName, const trace::WSTRING assemblyName,
                        const ComPtr<IMetaDataImport2>& metadata_import, mdTypeDef& typeDef);
+
+// FunctionMethodSignature
+bool ParseByte(PCCOR_SIGNATURE& pbCur, PCCOR_SIGNATURE pbEnd, unsigned char* pbOut);
+bool ParseNumber(PCCOR_SIGNATURE& pbCur, PCCOR_SIGNATURE pbEnd, unsigned* pOut);
+bool ParseTypeDefOrRefEncoded(PCCOR_SIGNATURE& pbCur, PCCOR_SIGNATURE pbEnd, unsigned char* pIndexTypeOut,
+                              unsigned* pIndexOut);
+
+/*  we don't support
+    PTR CustomMod* VOID
+    PTR CustomMod* Type
+    FNPTR MethodDefSig
+    FNPTR MethodRefSig
+    ARRAY Type ArrayShape
+    SZARRAY CustomMod+ Type (but we do support SZARRAY Type)
+ */
+bool ParseType(PCCOR_SIGNATURE& pbCur, PCCOR_SIGNATURE pbEnd);
+// Param ::= CustomMod* ( TYPEDBYREF | [BYREF] Type )
+// CustomMod* TYPEDBYREF we don't support
+bool ParseParamOrLocal(PCCOR_SIGNATURE& pbCur, PCCOR_SIGNATURE pbEnd);
+// RetType ::= CustomMod* ( VOID | TYPEDBYREF | [BYREF] Type )
+// CustomMod* TYPEDBYREF we don't support
+bool ParseRetType(PCCOR_SIGNATURE& pbCur, PCCOR_SIGNATURE pbEnd);
 } // namespace trace
 
 #endif // OTEL_CLR_PROFILER_CLR_HELPERS_H_

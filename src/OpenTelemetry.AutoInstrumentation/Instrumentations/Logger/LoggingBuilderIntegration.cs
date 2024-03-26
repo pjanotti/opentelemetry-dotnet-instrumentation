@@ -1,18 +1,5 @@
-// <copyright file="LoggingBuilderIntegration.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 #if NET6_0_OR_GREATER
 using OpenTelemetry.AutoInstrumentation.CallTarget;
@@ -29,7 +16,7 @@ namespace OpenTelemetry.AutoInstrumentation.Instrumentations.Logger;
     returnTypeName: ClrNames.Void,
     parameterTypeNames: new[] { "Microsoft.Extensions.DependencyInjection.IServiceCollection" },
     minimumVersion: "3.1.0",
-    maximumVersion: "7.*.*",
+    maximumVersion: "8.*.*",
     integrationName: "ILogger",
     type: InstrumentationType.Log)]
 public static class LoggingBuilderIntegration
@@ -47,7 +34,7 @@ public static class LoggingBuilderIntegration
         if (instance is not null)
         {
             var logBuilderExtensionsType = Type.GetType("OpenTelemetry.AutoInstrumentation.Logger.LogBuilderExtensions, OpenTelemetry.AutoInstrumentation");
-            var methodInfo = logBuilderExtensionsType?.GetMethod("AddOpenTelemetryLogs");
+            var methodInfo = logBuilderExtensionsType?.GetMethod("AddOpenTelemetryLogsFromIntegration");
             methodInfo?.Invoke(null, new[] { (object)instance });
         }
 

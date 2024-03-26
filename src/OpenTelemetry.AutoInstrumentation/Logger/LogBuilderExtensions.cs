@@ -1,18 +1,5 @@
-// <copyright file="LogBuilderExtensions.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 #if NET6_0_OR_GREATER
 
@@ -25,20 +12,53 @@ namespace OpenTelemetry.AutoInstrumentation.Logger;
 
 internal static class LogBuilderExtensions
 {
-    public static ILoggingBuilder AddOpenTelemetryLogs(this ILoggingBuilder builder)
+    private static Type? _loggingProviderSdkType;
+    private static volatile bool _hostingStartupRan;
+
+    // this method is only called from LoggingBuilderIntegration
+    public static void AddOpenTelemetryLogsFromIntegration(ILoggingBuilder builder)
+    {
+        // For Net6, if HostingStartupAssembly is configured, we don't want to call integration again for host's ServiceCollection.
+        // OpenTelemetryLogger-related services were already added to WebApplicationServiceCollection and will
+        // be copied to host's ServiceCollection later. We can't depend on integration's
+        // capability to detect if integration was called before (by checking if ServiceDescriptor with
+        // given type is already added to ServiceCollection) as copying services from WebApplicationServiceCollection
+        // to host's ServiceCollection happens AFTER integration is called.
+
+        // All of this additional checking is NOT needed for net7. There we can rely on integration's capability
+        // to detect if integration was called before, because WebApplicationServiceCollection is not used when building host.
+
+        if (builder.Services is ServiceCollection && !(IsNet6() && _hostingStartupRan && IsHostServiceCollection(builder.Services)))
+        {
+            AddOpenTelemetryLogs(builder);
+        }
+    }
+
+    // this method is only called from BootstrapperHostingStartup
+    public static void AddOpenTelemetryLogsFromStartup(this ILoggingBuilder builder)
+    {
+        AddOpenTelemetryLogs(builder);
+        _hostingStartupRan = true;
+    }
+
+    private static void AddOpenTelemetryLogs(ILoggingBuilder builder)
     {
         try
         {
-            if (!(builder.Services is ServiceCollection services))
+            if (builder.Services == null)
             {
-                return builder;
+                AutoInstrumentationEventSource.Log.Verbose("Logs: The builder.Services property is not of the IServiceCollection type, so we're skipping the integration of logs with ServiceCollection.");
+                return;
             }
 
             // Integrate AddOpenTelemetry only once for ServiceCollection.
-            var openTelemetryLoggerProviderDescriptor = services.FirstOrDefault(descriptor => descriptor.ImplementationType == typeof(OpenTelemetryLoggerProvider));
+
+            _loggingProviderSdkType ??= Type.GetType("OpenTelemetry.Logs.LoggerProviderBuilderSdk, OpenTelemetry");
+            var openTelemetryLoggerProviderDescriptor = builder.Services.FirstOrDefault(descriptor => descriptor.ImplementationType == _loggingProviderSdkType);
             if (openTelemetryLoggerProviderDescriptor != null)
             {
-                return builder;
+                AutoInstrumentationEventSource.Log.Verbose("Logs: AddOpenTelemetry already called on logging builder instance.");
+                return;
             }
 
             var settings = Instrumentation.LogSettings.Value;
@@ -76,7 +96,7 @@ internal static class LogBuilderExtensions
                     case LogExporter.None:
                         break;
                     default:
-                        throw new ArgumentOutOfRangeException($"Traces exporter '{settings.LogExporter}' is incorrect");
+                        throw new ArgumentOutOfRangeException($"Logs exporter '{settings.LogExporter}' is incorrect");
                 }
             });
 
@@ -87,8 +107,24 @@ internal static class LogBuilderExtensions
             AutoInstrumentationEventSource.Log.Error($"Error in AddOpenTelemetryLogs: {ex}");
             throw;
         }
+    }
 
-        return builder;
+    private static bool IsNet6()
+    {
+        var frameworkDescription = FrameworkDescription.Instance;
+        return frameworkDescription.Name == ".NET" && frameworkDescription.ProductVersion.StartsWith("6");
+    }
+
+    private static bool IsHostServiceCollection(IServiceCollection builderServices)
+    {
+        var applicationLifetimeType = Type.GetType("Microsoft.Extensions.Hosting.Internal.ApplicationLifetime, Microsoft.Extensions.Hosting");
+        if (applicationLifetimeType == null)
+        {
+            return false;
+        }
+
+        var applicationLifetimeDescriptor = builderServices.FirstOrDefault(sd => sd.ImplementationType == applicationLifetimeType);
+        return applicationLifetimeDescriptor != null;
     }
 }
 #endif

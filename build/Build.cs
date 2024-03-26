@@ -3,7 +3,6 @@ using Nuke.Common.IO;
 using Nuke.Common.Tools.MSBuild;
 using Nuke.Common.Utilities.Collections;
 using static Nuke.Common.EnvironmentInfo;
-using static Nuke.Common.IO.FileSystemTasks;
 
 partial class Build : NukeBuild
 {
@@ -12,16 +11,20 @@ partial class Build : NukeBuild
     [Parameter("Configuration to build. Default is 'Release'")]
     readonly Configuration BuildConfiguration = Configuration.Release;
 
-    [Parameter("Platform to build - x86 or x64. Default is 'x64'")]
-    readonly MSBuildTargetPlatform Platform = MSBuildTargetPlatform.x64;
+    [Parameter("Platform to build - x86, x64, ARM64. Default is current architecture.")]
+    readonly MSBuildTargetPlatform Platform = GetDefaultTargetPlatform();
 
-    [Parameter($"Docker containers type to be used. One of '{ContainersNone}', '{ContainersLinux}', '{ContainersWindows}'. Default is '{ContainersLinux}'")]
+    [Parameter($"Docker containers type to be used in tests. One of '{ContainersNone}', '{ContainersLinux}', '{ContainersWindows}', '{ContainersWindowsOnly}'. Default is '{ContainersLinux}'")]
     readonly string Containers = ContainersLinux;
+
+    [Parameter("TargetFramework to be tested. Default is empty, meaning all TFMs supported by each test")]
+    readonly TargetFramework TestTargetFramework = TargetFramework.NOT_SPECIFIED;
 
     const string ContainersNone = "none";
     const string ContainersAny = "any";
     const string ContainersLinux = "linux";
     const string ContainersWindows = "windows";
+    const string ContainersWindowsOnly = "windows-only";
 
     [Parameter("Test projects filter. Optional, default matches all test projects. The project will be selected if the string is part of its name.")]
     readonly string TestProject = "";
@@ -44,11 +47,8 @@ partial class Build : NukeBuild
     [Parameter("The location to restore NuGet packages. Optional")]
     readonly AbsolutePath NuGetPackagesDirectory;
 
-    [Parameter("Version number of the NuGet packages built from the project. Default is '0.7.0'")]
-    string NuGetBaseVersionNumber = "0.7.0";
-
-    [Parameter("Version suffix added to the NuGet packages built from the project. Default is '-local.1'")]
-    string NuGetVersionSuffix = "-local.1";
+    [Parameter("Do not restore the projects before building.")]
+    readonly bool NoRestore;
 
     Target Clean => _ => _
         .Description("Cleans all build output")
@@ -68,7 +68,7 @@ partial class Build : NukeBuild
             NuGetArtifactsDirectory.CreateOrCleanDirectory();
             (NativeProfilerProject.Directory / "build").CreateOrCleanDirectory();
             (NativeProfilerProject.Directory / "deps").CreateOrCleanDirectory();
-            BuildDataDirectory.CreateOrCleanDirectory();
+            TestArtifactsDirectory.CreateOrCleanDirectory();
 
             void DeleteReparsePoints(string path)
             {
@@ -80,18 +80,34 @@ partial class Build : NukeBuild
         });
 
     Target Workflow => _ => _
-        .Description("GitHub workflow entry point")
-        .DependsOn(Clean)
+        .Description("Full workflow including build of deliverables (except NuGet packages) and run the respective tests")
+        .DependsOn(BuildWorkflow)
+        .DependsOn(TestWorkflow);
+
+    Target BuildWorkflow => _ => _
+        .Description("Builds the project deliverables (except NuGet packages)")
         .DependsOn(BuildTracer)
-        .DependsOn(CompileExamples)
+        .DependsOn(CompileExamples);
+
+    Target BuildNativeWorkflow => _ => _
+        .Description("Builds the native code project deliverables.")
+        .After(Clean)
+        .DependsOn(CreateRequiredDirectories)
+        .DependsOn(CompileNativeSrc)
+        .DependsOn(PublishNativeProfiler);
+
+    Target TestWorkflow => _ => _
+        .Description("Builds and run the tests against the local deliverables (except NuGet packages)")
+        .After(BuildWorkflow)
         .DependsOn(NativeTests)
         .DependsOn(ManagedTests);
 
     Target BuildTracer => _ => _
         .Description("Builds the native and managed src, and publishes the tracer home directory")
         .After(Clean)
+        .After(Restore)
         .DependsOn(CreateRequiredDirectories)
-        .DependsOn(Restore)
+        .DependsOn(BuildInstallationScripts)
         .DependsOn(GenerateNetFxTransientDependencies)
         .DependsOn(CompileManagedSrc)
         .DependsOn(PublishManagedProfiler)
@@ -113,7 +129,9 @@ partial class Build : NukeBuild
         .Description("Builds the managed unit / integration tests and runs them")
         .After(Clean, BuildTracer)
         .DependsOn(CreateRequiredDirectories)
+        .DependsOn(BuildInstallationScripts)
         .DependsOn(GenerateLibraryVersionFiles)
+        .DependsOn(CompileNativeDependenciesForManagedTests)
         .DependsOn(CompileManagedTests)
         .DependsOn(CompileMocks)
         .DependsOn(PublishMocks)
@@ -131,8 +149,10 @@ partial class Build : NukeBuild
                 return "Containers!=Windows";
             case ContainersWindows:
                 return "Containers!=Linux";
+            case ContainersWindowsOnly:
+                return "Containers=Windows";
             case ContainersAny:
-                throw new InvalidOperationException($"Containers={ContainersAny} is not supported directly. Specify concrete value, either Containers={ContainersLinux} or Containers={ContainersWindows}.");
+                throw new InvalidOperationException($"Containers={ContainersAny} is not supported directly. Specify concrete value, see help for options.");
             default:
                 throw new InvalidOperationException($"Containers={Containers} is not supported");
         }
@@ -146,10 +166,5 @@ partial class Build : NukeBuild
         }
 
         return "FullyQualifiedName~" + TestName;
-    }
-
-    static string AndFilter(params string[] args)
-    {
-        return string.Join("&", args.Where(s => !string.IsNullOrEmpty(s)));
     }
 }

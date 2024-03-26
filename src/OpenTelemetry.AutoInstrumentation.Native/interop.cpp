@@ -15,11 +15,6 @@
 #include <dlfcn.h>
 #endif
 
-EXTERN_C BOOL STDAPICALLTYPE IsProfilerAttached()
-{
-    return trace::profiler != nullptr && trace::profiler->IsAttached();
-}
-
 #ifdef _WIN32
 // GetAssemblyAndSymbolsBytes is used when injecting the Loader into a .NET Framework application.
 EXTERN_C VOID STDAPICALLTYPE GetAssemblyAndSymbolsBytes(BYTE** pAssemblyArray,
@@ -31,6 +26,11 @@ EXTERN_C VOID STDAPICALLTYPE GetAssemblyAndSymbolsBytes(BYTE** pAssemblyArray,
 }
 #endif
 
+EXTERN_C BOOL STDAPICALLTYPE IsProfilerAttached()
+{
+    return trace::profiler != nullptr && trace::profiler->IsAttached();
+}
+
 EXTERN_C VOID STDAPICALLTYPE AddInstrumentations(WCHAR* id, trace::CallTargetDefinition* items, int size)
 {
     return trace::profiler->AddInstrumentations(id, items, size);
@@ -39,6 +39,15 @@ EXTERN_C VOID STDAPICALLTYPE AddInstrumentations(WCHAR* id, trace::CallTargetDef
 EXTERN_C VOID STDAPICALLTYPE AddDerivedInstrumentations(WCHAR* id, trace::CallTargetDefinition* items, int size)
 {
     return trace::profiler->AddDerivedInstrumentations(id, items, size);
+}
+
+EXTERN_C VOID STDAPICALLTYPE ConfigureContinuousProfiler(bool         threadSamplingEnabled,
+                                                         unsigned int threadSamplingInterval,
+                                                         bool         allocationSamplingEnabled,
+                                                         unsigned int maxMemorySamplesPerMinute)
+{
+    return trace::profiler->ConfigureContinuousProfiler(threadSamplingEnabled, threadSamplingInterval,
+                                                        allocationSamplingEnabled, maxMemorySamplesPerMinute);
 }
 
 #ifndef _WIN32

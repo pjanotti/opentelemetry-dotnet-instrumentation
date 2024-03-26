@@ -1,18 +1,5 @@
-// <copyright file="TestHelper.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
 using System.Reflection;
@@ -42,11 +29,9 @@ public abstract class TestHelper
 
     protected ITestOutputHelper Output { get; }
 
-    /// <summary>
-    /// Gets the path for the test assembly, not the shadow copy created by xunit.
-    /// </summary>
     public string GetTestAssemblyPath()
     {
+        // Gets the path for the test assembly, not the shadow copy created by xunit.
 #if NETFRAMEWORK
         // CodeBase is deprecated outside .NET Framework, instead of suppressing the error
         // build the code as per recommendation for each runtime.
@@ -87,6 +72,13 @@ public abstract class TestHelper
         SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", $"http://localhost:{collector.Port}");
     }
 
+#if NET6_0_OR_GREATER
+    public void SetExporter(MockProfilesCollector collector)
+    {
+        SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", $"http://localhost:{collector.Port}");
+    }
+#endif
+
     public void EnableBytecodeInstrumentation()
     {
         SetEnvironmentVariable("CORECLR_ENABLE_PROFILING", "1");
@@ -99,18 +91,18 @@ public abstract class TestHelper
         RemoveEnvironmentVariable("OTEL_LOGS_EXPORTER");
     }
 
-    /// <summary>
-    /// RunTestApplication starts the test application, wait up to DefaultProcessTimeout.
-    /// Assertion exceptions are thrown if it timed out or the exit code is non-zero.
-    /// </summary>
-    public (string StandardOutput, string ErrorOutput) RunTestApplication(TestSettings? testSettings = null)
+    public (string StandardOutput, string ErrorOutput, int ProcessId) RunTestApplication(TestSettings? testSettings = null)
     {
+        // RunTestApplication starts the test application, wait up to DefaultProcessTimeout.
+        // Assertion exceptions are thrown if it timed out or the exit code is non-zero.
         testSettings ??= new();
         using var process = StartTestApplication(testSettings);
         Output.WriteLine($"ProcessName: " + process?.ProcessName);
         using var helper = new ProcessHelper(process);
 
         process.Should().NotBeNull();
+
+        var processId = process!.Id;
 
         bool processTimeout = !process!.WaitForExit((int)TestTimeout.ProcessExit.TotalMilliseconds);
         if (processTimeout)
@@ -125,28 +117,43 @@ public abstract class TestHelper
         processTimeout.Should().BeFalse("Test application timed out");
         process.ExitCode.Should().Be(0, "Test application exited with non-zero exit code");
 
-        return (helper.StandardOutput, helper.ErrorOutput);
+        return (helper.StandardOutput, helper.ErrorOutput, processId);
     }
 
-    /// <summary>
-    /// StartTestApplication starts the test application
-    /// and returns the Process instance for further interaction.
-    /// </summary>
-    /// <returns>Test application process</returns>
     public Process? StartTestApplication(TestSettings? testSettings = null)
     {
+        // StartTestApplication starts the test application
+        // and returns the Process instance for further interaction.
         testSettings ??= new();
 
+        var startupMode = testSettings.StartupMode;
+        if (startupMode == TestAppStartupMode.Auto)
+        {
+            startupMode = EnvironmentHelper.IsCoreClr() ? TestAppStartupMode.DotnetCLI : TestAppStartupMode.Exe;
+        }
+
         // get path to test application that the profiler will attach to
-        var testApplicationPath = EnvironmentHelper.GetTestApplicationPath(testSettings.PackageVersion, testSettings.Framework);
+        var testApplicationPath = EnvironmentHelper.GetTestApplicationPath(testSettings.PackageVersion, testSettings.Framework, startupMode);
         if (!File.Exists(testApplicationPath))
         {
             throw new Exception($"application not found: {testApplicationPath}");
         }
 
-        Output.WriteLine($"Starting Application: {testApplicationPath}");
-        var executable = EnvironmentHelper.IsCoreClr() ? EnvironmentHelper.GetTestApplicationExecutionSource() : testApplicationPath;
-        var args = EnvironmentHelper.IsCoreClr() ? $"{testApplicationPath} {testSettings.Arguments ?? string.Empty}" : testSettings.Arguments;
-        return InstrumentedProcessHelper.Start(executable, args, EnvironmentHelper);
+        if (startupMode == TestAppStartupMode.DotnetCLI)
+        {
+            Output.WriteLine($"DotnetCLI Starting Application: {testApplicationPath}");
+            var executable = EnvironmentHelper.GetTestApplicationExecutionSource();
+            var args = $"{testApplicationPath} {testSettings.Arguments ?? string.Empty}";
+            return InstrumentedProcessHelper.Start(executable, args, EnvironmentHelper);
+        }
+        else if (startupMode == TestAppStartupMode.Exe)
+        {
+            Output.WriteLine($"Starting Application: {testApplicationPath}");
+            return InstrumentedProcessHelper.Start(testApplicationPath, testSettings.Arguments, EnvironmentHelper);
+        }
+        else
+        {
+            throw new InvalidOperationException($"StartupMode '{startupMode}' has no logic defined.");
+        }
     }
 }

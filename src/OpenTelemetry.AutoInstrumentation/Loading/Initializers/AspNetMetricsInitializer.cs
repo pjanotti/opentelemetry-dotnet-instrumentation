@@ -1,29 +1,20 @@
-// <copyright file="AspNetMetricsInitializer.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 #if NETFRAMEWORK
+
+using OpenTelemetry.AutoInstrumentation.Plugins;
 
 namespace OpenTelemetry.AutoInstrumentation.Loading.Initializers;
 
 internal class AspNetMetricsInitializer
 {
+    private readonly PluginManager _pluginManager;
     private int _initialized;
 
-    public AspNetMetricsInitializer(LazyInstrumentationLoader lazyInstrumentationLoader)
+    public AspNetMetricsInitializer(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
     {
+        _pluginManager = pluginManager;
         lazyInstrumentationLoader.Add(new AspNetMvcInitializer(InitializeOnFirstCall));
         lazyInstrumentationLoader.Add(new AspNetWebApiInitializer(InitializeOnFirstCall));
     }
@@ -37,7 +28,11 @@ internal class AspNetMetricsInitializer
         }
 
         var instrumentationType = Type.GetType("OpenTelemetry.Instrumentation.AspNet.AspNetMetrics, OpenTelemetry.Instrumentation.AspNet");
-        var instrumentation = Activator.CreateInstance(instrumentationType);
+
+        var options = new OpenTelemetry.Instrumentation.AspNet.AspNetMetricsInstrumentationOptions();
+        _pluginManager.ConfigureMetricsOptions(options);
+
+        var instrumentation = Activator.CreateInstance(instrumentationType, args: options);
 
         lifespanManager.Track(instrumentation);
     }

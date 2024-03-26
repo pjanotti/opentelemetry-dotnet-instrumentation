@@ -7,6 +7,11 @@
 #include <corprof.h>
 #include <string>
 #include <typeinfo>
+#ifdef _WIN32
+#include <regex>
+#else
+#include <re2/re2.h>
+#endif
 
 #include "clr_helpers.h"
 #include "dllmain.h"
@@ -24,6 +29,7 @@
 #include "stats.h"
 #include "util.h"
 #include "version.h"
+#include "continuous_profiler.h"
 
 #ifdef MACOS
 #include <mach-o/dyld.h>
@@ -57,7 +63,8 @@ CorProfiler* profiler = nullptr;
 //
 HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown* cor_profiler_info_unknown)
 {
-    auto _ = trace::Stats::Instance()->InitializeMeasure();
+    auto _                   = trace::Stats::Instance()->InitializeMeasure();
+    this->continuousProfiler = nullptr;
 
     CorProfilerBase::Initialize(cor_profiler_info_unknown);
 
@@ -66,9 +73,29 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown* cor_profiler_info_un
         const auto env_variables = GetEnvironmentVariables(env_vars_prefixes_to_display);
         Logger::Debug("Environment variables:");
 
+        // Update the list also in SmokeTests.NativeLogsHaveNoSensitiveData
+        const auto secrets_pattern = "(?:^|_)(API|TOKEN|SECRET|KEY|PASSWORD|PASS|PWD|HEADER|CREDENTIALS)(?:_|$)";
+#ifdef _WIN32
+        const std::regex secrets_regex(secrets_pattern, std::regex_constants::ECMAScript | std::regex_constants::icase);
+#else
+        static re2::RE2 re(secrets_pattern, RE2::Quiet);
+#endif
+
         for (const auto& env_variable : env_variables)
         {
-            Logger::Debug("  ", env_variable);
+#ifdef _WIN32
+            if (!std::regex_search(ToString(env_variable), secrets_regex))
+#else
+            if (!re2::RE2::PartialMatch(ToString(env_variable), re))
+#endif
+            {
+                Logger::Debug("  ", env_variable);
+            }
+            else
+            {
+                // Remove secret value and replace with <hidden>
+                Logger::Debug("  ", env_variable.substr(0, env_variable.find_first_of('=')), "=<hidden>");
+            }
         }
     }
 
@@ -78,7 +105,8 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown* cor_profiler_info_un
     if (SUCCEEDED(hr))
     {
         Logger::Debug("Interface ICorProfilerInfo12 found.");
-        this->info_ = info12;
+        this->info_   = info12;
+        this->info12_ = info12;
     }
     else
     {
@@ -88,7 +116,8 @@ HRESULT STDMETHODCALLTYPE CorProfiler::Initialize(IUnknown* cor_profiler_info_un
         {
             FailProfiler(Warn, "Failed to attach profiler: Not supported .NET Framework version (lower than 4.6.1).")
         }
-        info12 = nullptr;
+        info12        = nullptr;
+        this->info12_ = nullptr;
     }
 
     // code is ready to get runtime information
@@ -590,7 +619,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ModuleLoadFinished(ModuleID module_id, HR
     {
         // We check if the Module contains NGEN images and added to the
         // rejit handler list to verify the inlines.
-        rejit_handler->AddNGenModule(module_id);
+        rejit_handler->AddNGenInlinerModule(module_id);
     }
 
     AppDomainID app_domain_id = module_info.assembly.app_domain_id;
@@ -962,7 +991,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITInlining(FunctionID callerId, Function
 
     ModuleID calleeModuleId;
     mdToken  calleFunctionToken = mdTokenNil;
-    auto     hr                 = this->info_->GetFunctionInfo(calleeId, NULL, &calleeModuleId, &calleFunctionToken);
+    auto     hr                 = this->info_->GetFunctionInfo(calleeId, nullptr, &calleeModuleId, &calleFunctionToken);
 
     *pfShouldInline = true;
 
@@ -981,6 +1010,11 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITInlining(FunctionID callerId, Function
     }
 
     return S_OK;
+}
+
+bool CorProfiler::IsAttached() const
+{
+    return is_attached_;
 }
 
 void CorProfiler::AddInstrumentations(WCHAR* id, CallTargetDefinition* items, int size)
@@ -1093,6 +1127,54 @@ void CorProfiler::InternalAddInstrumentation(WCHAR* id, CallTargetDefinition* it
         }
 
         Logger::Info("InternalAddInstrumentation: Total integrations in profiler: ", integration_definitions_.size());
+    }
+}
+
+void CorProfiler::ConfigureContinuousProfiler(bool         threadSamplingEnabled,
+                                              unsigned int threadSamplingInterval,
+                                              bool         allocationSamplingEnabled,
+                                              unsigned int maxMemorySamplesPerMinute)
+{
+    Logger::Info("ConfigureContinuousProfiler: thread sampling enabled: ", threadSamplingEnabled,
+                 ", thread sampling interval: ", threadSamplingInterval, ", allocationSamplingEnabled: ",
+                 allocationSamplingEnabled, ", max memory samples per minute: ", maxMemorySamplesPerMinute);
+
+    if (!threadSamplingEnabled && !allocationSamplingEnabled)
+    {
+        Logger::Debug("ConfigureContinuousProfiler: Thread sampling and allocations sampling disabled.");
+        return;
+    }
+
+    DWORD pdvEventsLow;
+    DWORD pdvEventsHigh;
+    auto  hr = this->info12_->GetEventMask2(&pdvEventsLow, &pdvEventsHigh);
+    if (FAILED(hr))
+    {
+        Logger::Warn("ConfigureContinuousProfiler: Failed to take event masks for continuous profiler.");
+        return;
+    }
+
+    pdvEventsLow |= COR_PRF_MONITOR_THREADS | COR_PRF_ENABLE_STACK_SNAPSHOT;
+
+    hr = this->info12_->SetEventMask2(pdvEventsLow, pdvEventsHigh);
+    if (FAILED(hr))
+    {
+        Logger::Warn("ConfigureContinuousProfiler: Failed to set event masks for continuous profiler.");
+        return;
+    }
+
+    this->continuousProfiler = new continuous_profiler::ContinuousProfiler();
+    this->continuousProfiler->SetGlobalInfo12(this->info12_);
+    Logger::Info("ConfigureContinuousProfiler: Events masks configured for continuous profiler");
+
+    if (threadSamplingEnabled)
+    {
+        this->continuousProfiler->StartThreadSampling(threadSamplingInterval);
+    }
+
+    if (allocationSamplingEnabled)
+    {
+        this->continuousProfiler->StartAllocationSampling(maxMemorySamplesPerMinute);
     }
 }
 
@@ -1310,7 +1392,8 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCompilationStartedOnNetFramework(Funct
 
         first_jit_compilation_app_domains.insert(module_metadata->app_domain_id);
 
-        hr = RunAutoInstrumentationLoader(module_metadata->metadata_emit, module_id, function_token);
+        hr = RunAutoInstrumentationLoader(module_metadata->metadata_emit, module_id, function_token, caller,
+                                          *module_metadata);
         if (FAILED(hr))
         {
             Logger::Warn("JITCompilationStarted: Call to RunAutoInstrumentationLoader() failed for ", module_id, " ",
@@ -1335,11 +1418,6 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCompilationStartedOnNetFramework(Funct
     return S_OK;
 }
 #endif
-
-bool CorProfiler::IsAttached() const
-{
-    return is_attached_;
-}
 
 WSTRING CorProfiler::GetBytecodeInstrumentationAssembly() const
 {
@@ -1435,10 +1513,10 @@ const std::string indent_values[] = {
     std::string(2 * 10, ' '),
 };
 
-std::string CorProfiler::GetILCodes(const std::string&    title,
-                                    ILRewriter*           rewriter,
-                                    const FunctionInfo&   caller,
-                                    const ModuleMetadata& module_metadata)
+std::string CorProfiler::GetILCodes(const std::string&              title,
+                                    ILRewriter*                     rewriter,
+                                    const FunctionInfo&             caller,
+                                    const ComPtr<IMetaDataImport2>& metadata_import)
 {
     std::stringstream orig_sstream;
     orig_sstream << title;
@@ -1459,8 +1537,7 @@ std::string CorProfiler::GetILCodes(const std::string&    title,
 
     if (localVarSig != mdTokenNil)
     {
-        auto hr =
-            module_metadata.metadata_import->GetSigFromToken(localVarSig, &originalSignature, &originalSignatureSize);
+        auto hr = metadata_import->GetSigFromToken(localVarSig, &originalSignature, &originalSignatureSize);
         if (SUCCEEDED(hr))
         {
             orig_sstream << std::endl
@@ -1567,7 +1644,7 @@ std::string CorProfiler::GetILCodes(const std::string&    title,
 
             if (cInstr->m_opcode == CEE_CALL || cInstr->m_opcode == CEE_CALLVIRT || cInstr->m_opcode == CEE_NEWOBJ)
             {
-                const auto memberInfo = GetFunctionInfo(module_metadata.metadata_import, (mdMemberRef)cInstr->m_Arg32);
+                const auto memberInfo = GetFunctionInfo(metadata_import, (mdMemberRef)cInstr->m_Arg32);
                 orig_sstream << "  | ";
                 orig_sstream << ToString(memberInfo.type.name);
                 orig_sstream << ".";
@@ -1588,7 +1665,7 @@ std::string CorProfiler::GetILCodes(const std::string&    title,
                      cInstr->m_opcode == CEE_UNBOX_ANY || cInstr->m_opcode == CEE_NEWARR ||
                      cInstr->m_opcode == CEE_INITOBJ)
             {
-                const auto typeInfo = GetTypeInfo(module_metadata.metadata_import, (mdTypeRef)cInstr->m_Arg32);
+                const auto typeInfo = GetTypeInfo(metadata_import, (mdTypeRef)cInstr->m_Arg32);
                 orig_sstream << "  | ";
                 orig_sstream << ToString(typeInfo.name);
             }
@@ -1596,8 +1673,7 @@ std::string CorProfiler::GetILCodes(const std::string&    title,
             {
                 WCHAR szString[1024];
                 ULONG szStringLength;
-                auto  hr = module_metadata.metadata_import->GetUserString((mdString)cInstr->m_Arg32, szString, 1024,
-                                                                         &szStringLength);
+                auto  hr = metadata_import->GetUserString((mdString)cInstr->m_Arg32, szString, 1024, &szStringLength);
                 if (SUCCEEDED(hr))
                 {
                     orig_sstream << "  | \"";
@@ -1639,7 +1715,9 @@ std::string CorProfiler::GetILCodes(const std::string&    title,
 //
 HRESULT CorProfiler::RunAutoInstrumentationLoader(const ComPtr<IMetaDataEmit2>& metadata_emit,
                                                   const ModuleID                module_id,
-                                                  const mdToken                 function_token)
+                                                  const mdToken                 function_token,
+                                                  const FunctionInfo&           caller,
+                                                  const ModuleMetadata&         module_metadata)
 {
     mdMethodDef ret_method_token;
     auto        hr = GenerateLoaderMethod(module_id, &ret_method_token);
@@ -2264,6 +2342,16 @@ HRESULT CorProfiler::GenerateLoaderMethod(const ModuleID module_id, mdMethodDef*
     pNewInstr->m_opcode = CEE_RET;
     rewriter_void.InsertBefore(pFirstInstr, pNewInstr);
 
+    if (IsDumpILRewriteEnabled())
+    {
+        mdToken      token = 0;
+        TypeInfo     typeInfo{};
+        WSTRING      methodName = WStr("__DDVoidMethodCall__");
+        FunctionInfo caller(token, methodName, typeInfo, MethodSignature(), FunctionMethodSignature());
+        Logger::Info(
+            GetILCodes("*** GenerateLoaderMethod(): Modified Code: ", &rewriter_void, caller, metadata_import));
+    }
+
     hr = rewriter_void.Export();
     if (FAILED(hr))
     {
@@ -2550,6 +2638,13 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCachedFunctionSearchStarted(FunctionID
         return S_OK;
     }
 
+    // Call RequestRejit for register inliners and current NGEN module.
+    if (rejit_handler != nullptr)
+    {
+        // Process the current module to detect inliners.
+        rejit_handler->AddNGenInlinerModule(module_id);
+    }
+
     // Verify that we have the metadata for this module
     if (!Contains(module_ids_, module_id))
     {
@@ -2574,6 +2669,51 @@ HRESULT STDMETHODCALLTYPE CorProfiler::JITCachedFunctionSearchStarted(FunctionID
     }
 
     *pbUseCachedFunction = true;
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CorProfiler::ThreadCreated(ThreadID threadId)
+{
+    if (continuousProfiler != nullptr)
+    {
+        continuousProfiler->ThreadCreated(threadId);
+    }
+    return S_OK;
+}
+HRESULT STDMETHODCALLTYPE CorProfiler::ThreadDestroyed(ThreadID threadId)
+{
+    if (continuousProfiler != nullptr)
+    {
+        continuousProfiler->ThreadDestroyed(threadId);
+    }
+    return S_OK;
+}
+HRESULT STDMETHODCALLTYPE CorProfiler::ThreadNameChanged(ThreadID threadId, ULONG cchName, WCHAR name[])
+{
+    if (continuousProfiler != nullptr)
+    {
+        continuousProfiler->ThreadNameChanged(threadId, cchName, name);
+    }
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CorProfiler::EventPipeEventDelivered(EVENTPIPE_PROVIDER provider,
+                                                               DWORD              eventId,
+                                                               DWORD              eventVersion,
+                                                               ULONG              cbMetadataBlob,
+                                                               LPCBYTE            metadataBlob,
+                                                               ULONG              cbEventData,
+                                                               LPCBYTE            eventData,
+                                                               LPCGUID            pActivityId,
+                                                               LPCGUID            pRelatedActivityId,
+                                                               ThreadID           eventThread,
+                                                               ULONG              numStackFrames,
+                                                               UINT_PTR           stackFrames[])
+{
+    if (continuousProfiler != nullptr && eventId == 10 && eventVersion == 4)
+    {
+        continuousProfiler->AllocationTick(cbEventData, eventData);
+    }
     return S_OK;
 }
 

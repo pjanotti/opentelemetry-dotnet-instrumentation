@@ -1,18 +1,5 @@
-// <copyright file="PluginManager.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Reflection;
 using OpenTelemetry.AutoInstrumentation.Configurations;
@@ -22,7 +9,7 @@ using OpenTelemetry.Trace;
 
 namespace OpenTelemetry.AutoInstrumentation.Plugins;
 
-internal class PluginManager
+internal partial class PluginManager
 {
     private readonly IReadOnlyList<(Type Type, object Instance)> _plugins;
 
@@ -41,16 +28,12 @@ internal class PluginManager
         _plugins = plugins;
     }
 
+    // Created for testing purposes.
+    internal IReadOnlyList<(Type Type, object Instance)> Plugins => _plugins;
+
     public void Initializing()
     {
-        foreach (var plugin in _plugins)
-        {
-            var mi = plugin.Type.GetMethod("Initializing", Type.EmptyTypes);
-            if (mi is not null)
-            {
-                mi.Invoke(plugin.Instance, null);
-            }
-        }
+        CallPlugins("Initializing");
     }
 
     /// <summary>
@@ -77,37 +60,57 @@ internal class PluginManager
         return payloads;
     }
 
-    public TracerProviderBuilder ConfigureTracerProviderBuilder(TracerProviderBuilder builder)
+    public void InitializedProvider(TracerProvider tracerProvider)
     {
-        return ConfigureBuilder(builder, "ConfigureTracerProvider");
+        CallPlugins("TracerProviderInitialized", (typeof(TracerProvider), tracerProvider));
     }
 
-    public MeterProviderBuilder ConfigureMeterProviderBuilder(MeterProviderBuilder builder)
+    public void InitializedProvider(MeterProvider meterProvider)
     {
-        return ConfigureBuilder(builder, "ConfigureMeterProvider");
+        CallPlugins("MeterProviderInitialized", (typeof(MeterProvider), meterProvider));
+    }
+
+    public TracerProviderBuilder BeforeConfigureTracerProviderBuilder(TracerProviderBuilder builder)
+    {
+        return ConfigureBuilder(builder, "BeforeConfigureTracerProvider");
+    }
+
+    public MeterProviderBuilder BeforeConfigureMeterProviderBuilder(MeterProviderBuilder builder)
+    {
+        return ConfigureBuilder(builder, "BeforeConfigureMeterProvider");
+    }
+
+    public TracerProviderBuilder AfterConfigureTracerProviderBuilder(TracerProviderBuilder builder)
+    {
+        return ConfigureBuilder(builder, "AfterConfigureTracerProvider");
+    }
+
+    public MeterProviderBuilder AfterConfigureMeterProviderBuilder(MeterProviderBuilder builder)
+    {
+        return ConfigureBuilder(builder, "AfterConfigureMeterProvider");
     }
 
     public void ConfigureMetricsOptions<T>(T options)
         where T : notnull
     {
-        ConfigureOptions(options, "ConfigureMetricsOptions");
+        CallPlugins("ConfigureMetricsOptions", (typeof(T), options));
     }
 
     public void ConfigureTracesOptions<T>(T options)
         where T : notnull
     {
-        ConfigureOptions(options, "ConfigureTracesOptions");
+        CallPlugins("ConfigureTracesOptions", (typeof(T), options));
     }
 
     public void ConfigureTracesOptions(object options)
     {
-        ConfigureOptions(options.GetType(), options, "ConfigureTracesOptions");
+        CallPlugins("ConfigureTracesOptions", (options.GetType(), options));
     }
 
     public void ConfigureLogsOptions<T>(T options)
         where T : notnull
     {
-        ConfigureOptions(options, "ConfigureLogsOptions");
+        CallPlugins("ConfigureLogsOptions", (typeof(T), options));
     }
 
     public ResourceBuilder ConfigureResourceBuilder(ResourceBuilder builder)
@@ -115,36 +118,35 @@ internal class PluginManager
         return ConfigureBuilder(builder, "ConfigureResource");
     }
 
-    private void ConfigureOptions<T>(T options, string methodName)
-        where T : notnull
-    {
-        ConfigureOptions(typeof(T), options, methodName);
-    }
-
-    private void ConfigureOptions(Type type, object options, string methodName)
-    {
-        foreach (var plugin in _plugins)
-        {
-            var mi = plugin.Type.GetMethod(methodName, new[] { type });
-            if (mi is not null)
-            {
-                mi.Invoke(plugin.Instance, new[] { options });
-            }
-        }
-    }
-
     private T ConfigureBuilder<T>(T builder, string methodName)
         where T : notnull
     {
-        foreach (var plugin in _plugins)
-        {
-            var mi = plugin.Type.GetMethod(methodName, new[] { typeof(T) });
-            if (mi is not null)
-            {
-                mi.Invoke(plugin.Instance, new object[] { builder });
-            }
-        }
+        CallPlugins(methodName, (typeof(T), builder));
 
         return builder;
+    }
+
+    private void CallPlugins(string methodName)
+    {
+        foreach (var plugin in _plugins)
+        {
+            var mi = plugin.Type.GetMethod(methodName, Type.EmptyTypes);
+            if (mi is not null)
+            {
+                mi.Invoke(plugin.Instance, null);
+            }
+        }
+    }
+
+    private void CallPlugins(string methodName, (Type Type, object Value) arg)
+    {
+        foreach (var plugin in _plugins)
+        {
+            var mi = plugin.Type.GetMethod(methodName, new[] { arg.Type });
+            if (mi is not null)
+            {
+                mi.Invoke(plugin.Instance, new object[] { arg.Value });
+            }
+        }
     }
 }

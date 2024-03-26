@@ -1,18 +1,5 @@
-// <copyright file="Program.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
@@ -29,9 +16,8 @@ public class Program
     public static void Main(string[] args)
     {
         ConsoleHelper.WriteSplashScreen(args);
-        EmitTraces();
+        EmitTracesAndLogs();
         EmitMetrics();
-        EmitLogs();
 
         // The "LONG_RUNNING" environment variable is used by tests that access/receive
         // data that takes time to be produced.
@@ -47,16 +33,14 @@ public class Program
         }
     }
 
-    private static void EmitTraces()
+    private static void EmitTracesAndLogs()
     {
         var myActivitySource = new ActivitySource(SourceName, "1.0.0");
 
-        using (var activity = myActivitySource.StartActivity("SayHello"))
-        {
-            activity?.SetTag("foo", 1);
-            activity?.SetTag("bar", "Hello, World!");
-            activity?.SetTag("baz", new int[] { 1, 2, 3 });
-        }
+        using var activity = myActivitySource.StartActivity("SayHello");
+        activity?.SetTag("foo", 1);
+        activity?.SetTag("bar", "Hello, World!");
+        activity?.SetTag("baz", new int[] { 1, 2, 3 });
 
         using var client = new HttpClient
         {
@@ -71,6 +55,14 @@ public class Program
         {
             Console.WriteLine(ex);
         }
+
+        using var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder
+                .AddFilter("Microsoft", LogLevel.Warning);
+        });
+        var logger = loggerFactory.CreateLogger<Program>();
+        logger.LogInformation("Example log message");
     }
 
     private static void EmitMetrics()
@@ -79,17 +71,5 @@ public class Program
         var myFruitCounter = myMeter.CreateCounter<int>("MyFruitCounter");
 
         myFruitCounter.Add(1, new KeyValuePair<string, object?>("name", "apple"));
-    }
-
-    private static void EmitLogs()
-    {
-        using var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder
-                .AddFilter("Microsoft", LogLevel.Warning);
-        });
-
-        ILogger logger = loggerFactory.CreateLogger<Program>();
-        logger.LogInformation("Example log message");
     }
 }

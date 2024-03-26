@@ -1,18 +1,5 @@
-// <copyright file="NativeMethods.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.InteropServices;
 
@@ -21,16 +8,6 @@ namespace OpenTelemetry.AutoInstrumentation;
 internal static class NativeMethods
 {
     private static readonly bool IsWindows = string.Equals(FrameworkDescription.Instance.OSPlatform, "Windows", StringComparison.OrdinalIgnoreCase);
-
-    public static bool IsProfilerAttached()
-    {
-        if (IsWindows)
-        {
-            return Windows.IsProfilerAttached();
-        }
-
-        return NonWindows.IsProfilerAttached();
-    }
 
     public static void AddInstrumentations(string id, NativeCallTargetDefinition[] methodArrays)
     {
@@ -66,30 +43,89 @@ internal static class NativeMethods
         }
     }
 
+#if NET6_0_OR_GREATER
+    public static void ConfigureNativeContinuousProfiler(bool threadSamplingEnabled, uint threadSamplingInterval, bool allocationSamplingEnabled, uint maxMemorySamplesPerMinute)
+    {
+        if (IsWindows)
+        {
+            Windows.ConfigureContinuousProfiler(threadSamplingEnabled, threadSamplingInterval, allocationSamplingEnabled, maxMemorySamplesPerMinute);
+        }
+        else
+        {
+            NonWindows.ConfigureContinuousProfiler(threadSamplingEnabled, threadSamplingInterval, allocationSamplingEnabled, maxMemorySamplesPerMinute);
+        }
+    }
+
+    public static int ContinuousProfilerReadThreadSamples(int len, byte[] buf)
+    {
+        return IsWindows ? Windows.ContinuousProfilerReadThreadSamples(len, buf) : NonWindows.ContinuousProfilerReadThreadSamples(len, buf);
+    }
+
+    public static int ContinuousProfilerReadAllocationSamples(int len, byte[] buf)
+    {
+        return IsWindows ? Windows.ContinuousProfilerReadAllocationSamples(len, buf) : NonWindows.ContinuousProfilerReadAllocationSamples(len, buf);
+    }
+
+    public static void ContinuousProfilerSetNativeContext(ulong traceIdHigh, ulong traceIdLow, ulong spanId)
+    {
+        if (IsWindows)
+        {
+            Windows.ContinuousProfilerSetNativeContext(traceIdHigh, traceIdLow, spanId);
+        }
+        else
+        {
+            NonWindows.ContinuousProfilerSetNativeContext(traceIdHigh, traceIdLow, spanId);
+        }
+    }
+#endif
+
     // the "dll" extension is required on .NET Framework
     // and optional on .NET Core
     private static class Windows
     {
         [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
-        public static extern bool IsProfilerAttached();
-
-        [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
         public static extern void AddInstrumentations([MarshalAs(UnmanagedType.LPWStr)] string id, [In] NativeCallTargetDefinition[] methodArrays, int size);
 
         [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
         public static extern void AddDerivedInstrumentations([MarshalAs(UnmanagedType.LPWStr)] string id, [In] NativeCallTargetDefinition[] methodArrays, int size);
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
+        public static extern void ConfigureContinuousProfiler(bool threadSamplingEnabled, uint threadSamplingInterval, bool allocationSamplingEnabled, uint maxMemorySamplesPerMinute);
+
+#if NET6_0_OR_GREATER
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
+        public static extern int ContinuousProfilerReadThreadSamples(int len, byte[] buf);
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
+        public static extern int ContinuousProfilerReadAllocationSamples(int len, byte[] buf);
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native.dll")]
+        public static extern void ContinuousProfilerSetNativeContext(ulong traceIdHigh, ulong traceIdLow, ulong spanId);
+#endif
     }
 
     // assume .NET Core if not running on Windows
     private static class NonWindows
     {
         [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
-        public static extern bool IsProfilerAttached();
-
-        [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
         public static extern void AddInstrumentations([MarshalAs(UnmanagedType.LPWStr)] string id, [In] NativeCallTargetDefinition[] methodArrays, int size);
 
         [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
         public static extern void AddDerivedInstrumentations([MarshalAs(UnmanagedType.LPWStr)] string id, [In] NativeCallTargetDefinition[] methodArrays, int size);
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
+        public static extern void ConfigureContinuousProfiler(bool threadSamplingEnabled, uint threadSamplingInterval, bool allocationSamplingEnabled, uint maxMemorySamplesPerMinute);
+
+#if NET6_0_OR_GREATER
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
+        public static extern int ContinuousProfilerReadThreadSamples(int len, byte[] buf);
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
+        public static extern int ContinuousProfilerReadAllocationSamples(int len, byte[] buf);
+
+        [DllImport("OpenTelemetry.AutoInstrumentation.Native")]
+        public static extern void ContinuousProfilerSetNativeContext(ulong traceIdHigh, ulong traceIdLow, ulong spanId);
+#endif
     }
 }

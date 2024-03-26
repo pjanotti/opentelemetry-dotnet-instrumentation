@@ -1,18 +1,5 @@
-// <copyright file="LoaderTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using Xunit;
 using Xunit.Abstractions;
@@ -38,16 +25,15 @@ public class LoaderTests
 #if NETFRAMEWORK
         var srcDir = Path.Combine(profilerDirectory, "net462");
         var dstDir = Path.Combine(profilerDirectory, "netfx");
+#else
+        var srcDir = Path.Combine(profilerDirectory, "net6.0");
+        var dstDir = Path.Combine(profilerDirectory, "net");
+#endif
+
         if (Directory.Exists(srcDir) && !Directory.Exists(dstDir))
         {
             Directory.Move(srcDir, dstDir);
         }
-#else
-        if (Directory.Exists(Path.Combine(profilerDirectory, "net6.0")))
-        {
-            Directory.Move(Path.Combine(profilerDirectory, "net6.0"), Path.Combine(profilerDirectory, "net"));
-        }
-#endif
 
         Environment.SetEnvironmentVariable("OTEL_LOG_LEVEL", "debug");
         Environment.SetEnvironmentVariable("OTEL_DOTNET_AUTO_HOME", profilerDirectory);

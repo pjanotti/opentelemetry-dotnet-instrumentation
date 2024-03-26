@@ -1,0 +1,36 @@
+name: Build on Centos Native Container
+
+on:
+  workflow_call:
+
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/packages
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build-centos-native-container:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-20.04
+    timeout-minutes: 60
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v4.1.2
+      with:
+        fetch-depth: 0 # fetching all, needed to correctly calculate version
+
+    - name: Build native library in Docker container
+      run: |
+        set -e
+        docker build -t mybuildimage -f "./docker/centos.dockerfile" ./docker
+        docker run -e OS_TYPE=linux-glibc --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
+          /bin/sh -c 'git config --global --add safe.directory /project && ./build.sh BuildNativeWorkflow'
+
+    - name: Publish native library Linux build
+      if: (${{ job.status }} != 'cancelled')
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: bin-centos-native
+        path: bin/tracer-home
+      continue-on-error: true

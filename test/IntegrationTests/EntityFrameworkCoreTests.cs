@@ -1,18 +1,5 @@
-// <copyright file="EntityFrameworkCoreTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 #if NET6_0_OR_GREATER
 
@@ -28,14 +15,32 @@ public class EntityFrameworkCoreTests : TestHelper
     {
     }
 
+    public static IEnumerable<object[]> GetData()
+    {
+        foreach (var version in LibraryVersion.EntityFrameworkCore)
+        {
+            yield return new[] { version[0], true };
+            yield return new[] { version[0], false };
+        }
+    }
+
     [Theory]
     [Trait("Category", "EndToEnd")]
-    [MemberData(nameof(LibraryVersion.EntityFrameworkCore), MemberType = typeof(LibraryVersion))]
-    public void SubmitsTraces(string packageVersion)
+    [MemberData(nameof(GetData))]
+    public void SubmitTraces(string packageVersion, bool dbStatementForText)
     {
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_ENTITYFRAMEWORKCORE_SET_DBSTATEMENT_FOR_TEXT", dbStatementForText.ToString());
         using var collector = new MockSpansCollector(Output);
         SetExporter(collector);
-        collector.Expect("OpenTelemetry.Instrumentation.EntityFrameworkCore");
+
+        if (dbStatementForText)
+        {
+            collector.Expect("OpenTelemetry.Instrumentation.EntityFrameworkCore", span => span.Attributes.Any(attr => attr.Key == "db.statement" && !string.IsNullOrWhiteSpace(attr.Value?.StringValue)));
+        }
+        else
+        {
+            collector.Expect("OpenTelemetry.Instrumentation.EntityFrameworkCore", span => span.Attributes.All(attr => attr.Key != "db.statement"));
+        }
 
         RunTestApplication(new TestSettings { PackageVersion = packageVersion });
 

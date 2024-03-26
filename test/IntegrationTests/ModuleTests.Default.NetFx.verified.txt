@@ -8,5 +8,8 @@
   OpenTelemetry.Instrumentation.Http,
   OpenTelemetry.Instrumentation.Process,
   OpenTelemetry.Instrumentation.Runtime,
-  OpenTelemetry.ResourceDetectors.Container
+  OpenTelemetry.ResourceDetectors.Azure,
+  OpenTelemetry.ResourceDetectors.Host,
+  OpenTelemetry.ResourceDetectors.Process,
+  OpenTelemetry.ResourceDetectors.ProcessRuntime
 ]

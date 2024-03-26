@@ -18,12 +18,15 @@ public static class Projects
         public const string AutoInstrumentationLoaderTests = "OpenTelemetry.AutoInstrumentation.Loader.Tests";
         public const string AutoInstrumentationBootstrappingTests = "OpenTelemetry.AutoInstrumentation.Bootstrapping.Tests";
         public const string AutoInstrumentationTests = "OpenTelemetry.AutoInstrumentation.Tests";
+        public const string AutoInstrumentationStartupHookTests = "OpenTelemetry.AutoInstrumentation.StartupHook.Tests";
         public const string IntegrationTests = "IntegrationTests";
 
         public static class Applications
         {
             public const string AspNet = "TestApplication.AspNet.NetFramework";
-            public const string Wcf = "TestApplication.Wcf.Server.IIS.NetFramework";
+            public const string WcfIis = "TestApplication.Wcf.Server.IIS.NetFramework";
+            public const string WcfServer = "TestApplication.Wcf.Server.NetFramework";
+            public const string ContinuousProfilerNativeDep = "TestApplication.ContinuousProfiler.NativeDep";
         }
     }
 

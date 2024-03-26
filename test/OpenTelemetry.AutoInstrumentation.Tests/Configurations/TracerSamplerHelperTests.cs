@@ -1,18 +1,5 @@
-// <copyright file="TracerSamplerHelperTests.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using FluentAssertions;
 using OpenTelemetry.AutoInstrumentation.Configurations;
@@ -34,7 +21,7 @@ public class TracerSamplerHelperTests
     [InlineData("parentbased_always_off", null, "ParentBased{AlwaysOffSampler}")]
     [InlineData("parentbased_traceidratio", null, "ParentBased{TraceIdRatioBasedSampler{1.000000}}")]
     [InlineData("parentbased_traceidratio", "0.25", "ParentBased{TraceIdRatioBasedSampler{0.250000}}")]
-    public void GetSamplerSupportedValues(string tracesSampler, string tracerSamplerArguments, string expectedDescription)
+    public void GetSamplerSupportedValues(string tracesSampler, string? tracerSamplerArguments, string expectedDescription)
     {
         var sampler = TracerSamplerHelper.GetSampler(tracesSampler, tracerSamplerArguments);
 
@@ -42,12 +29,10 @@ public class TracerSamplerHelperTests
         sampler!.Description.Should().Be(expectedDescription);
     }
 
-    [Theory]
-    [InlineData("non-supported-value", null)]
-    [InlineData(null, null)]
-    public void GetSamplerNonSupportedValues(string tracesSampler, string tracerSamplerArguments)
+    [Fact]
+    public void GetSamplerNonSupportedValues()
     {
-        var sampler = TracerSamplerHelper.GetSampler(tracesSampler, tracerSamplerArguments);
+        var sampler = TracerSamplerHelper.GetSampler("non-supported-value", null);
 
         sampler.Should().BeNull();
     }

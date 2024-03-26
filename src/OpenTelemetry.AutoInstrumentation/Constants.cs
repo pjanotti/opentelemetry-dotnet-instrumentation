@@ -1,27 +1,15 @@
-// <copyright file="Constants.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 namespace OpenTelemetry.AutoInstrumentation;
 
 internal static class Constants
 {
-    public static class Tracer
+    public static class DistributionAttributes
     {
-        public const string Version = "0.7.0";
-        public const string AutoInstrumentationVersionName = "telemetry.auto.version";
+        public const string TelemetryDistroNameAttributeName = "telemetry.distro.name";
+        public const string TelemetryDistroNameAttributeValue = "opentelemetry-dotnet-instrumentation";
+        public const string TelemetryDistroVersionAttributeName = "telemetry.distro.version";
     }
 
     public static class ConfigurationValues
@@ -62,5 +50,15 @@ internal static class Constants
             public const string Information = "info";
             public const string Debug = "debug";
         }
+    }
+
+    public static class EnvironmentVariables
+    {
+        public const string ProfilerEnabledVariable = "CORECLR_ENABLE_PROFILING";
+        public const string ProfilerIdVariable = "CORECLR_PROFILER";
+        public const string ProfilerPathVariable = "CORECLR_PROFILER_PATH";
+        public const string Profiler32BitPathVariable = "CORECLR_PROFILER_PATH_32";
+        public const string Profiler64BitPathVariable = "CORECLR_PROFILER_PATH_64";
+        public const string ProfilerId = "{918728DD-259F-4A6A-AC2B-B85E1B658318}";
     }
 }

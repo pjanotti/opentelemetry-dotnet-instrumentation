@@ -1,18 +1,5 @@
-// <copyright file="LazyInstrumentationLoader.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Reflection;
 using OpenTelemetry.AutoInstrumentation.Logging;
@@ -46,10 +33,7 @@ internal class LazyInstrumentationLoader : IDisposable
         private readonly InstrumentationInitializer _instrumentationInitializer;
         private readonly ILifespanManager _lifespanManager;
         private readonly string _requiredAssemblyName;
-
-#if NETFRAMEWORK
         private int _initialized;
-#endif
 
         public OnAssemblyLoadInitializer(ILifespanManager lifespanManager, InstrumentationInitializer instrumentationInitializer)
         {
@@ -59,8 +43,6 @@ internal class LazyInstrumentationLoader : IDisposable
 
             AppDomain.CurrentDomain.AssemblyLoad += CurrentDomain_AssemblyLoad;
 
-#if NETFRAMEWORK
-
             // 1. NetFramework doesn't have startuphook that executes before the main content.
             //    So, we must check at the startup, if the required assembly is already loaded.
             // 2. There are multiple race conditions here between assembly loaded event and checking
@@ -68,21 +50,27 @@ internal class LazyInstrumentationLoader : IDisposable
             // 3. To eliminate risks that initializer doesn't invoke, we ensure that both strategies
             //    are active at the same time, whichever executes first, determines the loading moment.
 
-            var isRequiredAssemblyLoaded = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .Any(x => GetAssemblyName(x) == _requiredAssemblyName);
+            var isRequiredAssemblyLoaded = Array.Exists(AppDomain.CurrentDomain.GetAssemblies(), x => IsAssemblyNameEqual(x, _requiredAssemblyName));
             if (isRequiredAssemblyLoaded)
             {
                 OnRequiredAssemblyDetected();
             }
-#endif
+        }
+
+        private static bool IsAssemblyNameEqual(Assembly assembly, string expectedAssemblyName)
+        {
+            var assemblyName = assembly.FullName.AsSpan();
+            if (assemblyName.Length <= expectedAssemblyName.Length)
+            {
+                return false;
+            }
+
+            return assemblyName.StartsWith(expectedAssemblyName.AsSpan()) && assemblyName[expectedAssemblyName.Length] == ',';
         }
 
         private void CurrentDomain_AssemblyLoad(object? sender, AssemblyLoadEventArgs args)
         {
-            var assemblyName = GetAssemblyName(args.LoadedAssembly);
-
-            if (_requiredAssemblyName == assemblyName)
+            if (IsAssemblyNameEqual(args.LoadedAssembly, _requiredAssemblyName))
             {
                 OnRequiredAssemblyDetected();
             }
@@ -90,13 +78,11 @@ internal class LazyInstrumentationLoader : IDisposable
 
         private void OnRequiredAssemblyDetected()
         {
-#if NETFRAMEWORK
             if (Interlocked.Exchange(ref _initialized, value: 1) != default)
             {
                 // OnRequiredAssemblyDetected() was already called before
                 return;
             }
-#endif
 
             AppDomain.CurrentDomain.AssemblyLoad -= CurrentDomain_AssemblyLoad;
 
@@ -111,11 +97,6 @@ internal class LazyInstrumentationLoader : IDisposable
             {
                 OtelLogger.Error(ex, "'{0}' failed", initializerName);
             }
-        }
-
-        private string? GetAssemblyName(Assembly assembly)
-        {
-            return assembly.FullName?.Split(new[] { ',' }, count: 2)[0];
         }
     }
 }

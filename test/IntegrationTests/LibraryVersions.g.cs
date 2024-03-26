@@ -13,13 +13,23 @@ namespace IntegrationTests;
 
 public static class LibraryVersion
 {
+    public static readonly IReadOnlyCollection<object[]> Azure = new List<object[]>
+    {
+#if DEFAULT_TEST_PACKAGE_VERSIONS
+        new object[] { string.Empty }
+#else
+        new object[] { "12.13.0" },
+        new object[] { "12.19.1" },
+#endif
+    };
     public static readonly IReadOnlyCollection<object[]> Elasticsearch = new List<object[]>
     {
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
         new object[] { "8.0.0" },
-        new object[] { "8.1.1" },
+        new object[] { "8.10.0" },
+        new object[] { "8.12.0" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> EntityFrameworkCore = new List<object[]>
@@ -27,8 +37,11 @@ public static class LibraryVersion
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
-        new object[] { "6.0.12" },
-        new object[] { "7.0.5" },
+        new object[] { "6.0.27" },
+        new object[] { "7.0.16" },
+#if NET8_0
+        new object[] { "8.0.2" },
+#endif
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> EntityFrameworkCorePomeloMySql = new List<object[]>
@@ -38,6 +51,9 @@ public static class LibraryVersion
 #else
         new object[] { "6.0.2" },
         new object[] { "7.0.0" },
+#if NET8_0
+        new object[] { "8.0.0" },
+#endif
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> GraphQL = new List<object[]>
@@ -45,8 +61,8 @@ public static class LibraryVersion
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
-        new object[] { "2.3.0" },
-        new object[] { "2.4.0" },
+        new object[] { "7.5.0" },
+        new object[] { "7.8.0" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> GrpcNetClient = new List<object[]>
@@ -54,8 +70,8 @@ public static class LibraryVersion
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
-        new object[] { "2.43.0" },
-        new object[] { "2.53.0" },
+        new object[] { "2.52.0" },
+        new object[] { "2.61.0" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> MassTransit = new List<object[]>
@@ -64,19 +80,26 @@ public static class LibraryVersion
         new object[] { string.Empty }
 #else
         new object[] { "8.0.0" },
-        new object[] { "8.0.16" },
+        new object[] { "8.1.3" },
 #endif
     };
-    public static readonly IReadOnlyCollection<object[]> SqlClient = new List<object[]>
+    public static readonly IReadOnlyCollection<object[]> SqlClientMicrosoft = new List<object[]>
     {
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
-        new object[] { "1.1.4" },
-        new object[] { "2.1.5" },
-        new object[] { "3.1.2" },
-        new object[] { "4.1.1" },
-        new object[] { "5.1.1" },
+        new object[] { "2.1.7" },
+        new object[] { "3.1.5" },
+        new object[] { "4.0.5" },
+        new object[] { "5.2.0" },
+#endif
+    };
+    public static readonly IReadOnlyCollection<object[]> SqlClientSystem = new List<object[]>
+    {
+#if DEFAULT_TEST_PACKAGE_VERSIONS
+        new object[] { string.Empty }
+#else
+        new object[] { "4.8.6" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> MongoDB = new List<object[]>
@@ -84,9 +107,17 @@ public static class LibraryVersion
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
-        new object[] { "2.13.3" },
-        new object[] { "2.15.0" },
-        new object[] { "2.19.2" },
+        new object[] { "2.19.0" },
+        new object[] { "2.24.0" },
+#endif
+    };
+    public static readonly IReadOnlyCollection<object[]> MySqlConnector = new List<object[]>
+    {
+#if DEFAULT_TEST_PACKAGE_VERSIONS
+        new object[] { string.Empty }
+#else
+        new object[] { "2.0.0" },
+        new object[] { "2.3.5" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> MySqlData = new List<object[]>
@@ -94,8 +125,8 @@ public static class LibraryVersion
 #if DEFAULT_TEST_PACKAGE_VERSIONS
         new object[] { string.Empty }
 #else
-        new object[] { "6.10.7" },
-        new object[] { "8.0.32.1" },
+        new object[] { "8.1.0" },
+        new object[] { "8.3.0" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> Npgsql = new List<object[]>
@@ -104,7 +135,7 @@ public static class LibraryVersion
         new object[] { string.Empty }
 #else
         new object[] { "6.0.0" },
-        new object[] { "7.0.4" },
+        new object[] { "8.0.2" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> NServiceBus = new List<object[]>
@@ -113,7 +144,7 @@ public static class LibraryVersion
         new object[] { string.Empty }
 #else
         new object[] { "8.0.0" },
-        new object[] { "8.0.3" },
+        new object[] { "8.1.6" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> Quartz = new List<object[]>
@@ -122,7 +153,7 @@ public static class LibraryVersion
         new object[] { string.Empty }
 #else
         new object[] { "3.4.0" },
-        new object[] { "3.6.2" },
+        new object[] { "3.8.1" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> StackExchangeRedis = new List<object[]>
@@ -134,7 +165,7 @@ public static class LibraryVersion
         new object[] { "2.1.50" },
         new object[] { "2.5.61" },
         new object[] { "2.6.66" },
-        new object[] { "2.6.111" },
+        new object[] { "2.7.23" },
 #endif
     };
     public static readonly IReadOnlyCollection<object[]> WCFCoreClient = new List<object[]>
@@ -143,7 +174,15 @@ public static class LibraryVersion
         new object[] { string.Empty }
 #else
         new object[] { "4.10.2" },
-        new object[] { "6.0.0" },
+        new object[] { "6.2.0" },
+#endif
+    };
+    public static readonly IReadOnlyCollection<object[]> Kafka = new List<object[]>
+    {
+#if DEFAULT_TEST_PACKAGE_VERSIONS
+        new object[] { string.Empty }
+#else
+        new object[] { "2.3.0" },
 #endif
     };
 }

@@ -8,7 +8,7 @@ cmake_policy(SET CMP0015 NEW)
 # Project definition
 # ******************************************************
 
-project("OpenTelemetry.AutoInstrumentation.Native" VERSION 0.7.0)
+project("OpenTelemetry.AutoInstrumentation.Native" VERSION ${OTEL_AUTO_VERSION})
 
 # ******************************************************
 # Environment detection
@@ -97,21 +97,16 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_BIN_DIR})
 # ******************************************************
 
 # Add custom commands to setup dependencies via git
-add_custom_command(
-    OUTPUT ${OUTPUT_DEPS_DIR}/json/include/nlohmann/json.hpp
-    COMMAND git clone --quiet --depth 1 --branch v3.11.2 https://github.com/nlohmann/json.git
-    WORKING_DIRECTORY ${OUTPUT_DEPS_DIR}
-)
 
 add_custom_command(
     OUTPUT ${OUTPUT_DEPS_DIR}/re2/obj/libre2.a
-    COMMAND git clone --quiet --depth 1 --branch 2022-12-01 https://github.com/google/re2.git && cd re2 && env ARFLAGS=\"-r -s -c\" CXXFLAGS=\"-std=c++11 -O3 -g -fPIC\" make
+    COMMAND git clone -c advice.detachedHead=false --quiet --depth 1 --branch 2023-03-01 https://github.com/google/re2.git && cd re2 && env ARFLAGS=\"-r -s -c\" CXXFLAGS=\"-std=c++11 -O3 -g -fPIC\" make
     WORKING_DIRECTORY ${OUTPUT_DEPS_DIR}
 )
 
 add_custom_command(
     OUTPUT ${OUTPUT_DEPS_DIR}/fmt/libfmt.a
-    COMMAND git clone --quiet --depth 1 --branch 9.1.0 https://github.com/fmtlib/fmt.git && cd fmt && cmake -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE -DFMT_TEST=0 -DFMT_DOC=0 . && make
+    COMMAND git clone -c advice.detachedHead=false --quiet --depth 1 --branch 10.1.1 https://github.com/fmtlib/fmt.git && cd fmt && cmake -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE -DFMT_TEST=0 -DFMT_DOC=0 . && make
     WORKING_DIRECTORY ${OUTPUT_DEPS_DIR}
 )
 
@@ -145,9 +140,15 @@ elseif (ISX86)
     add_compile_options(-DBX86 -DHOST_X86)
 elseif (ISARM64)
     add_compile_options(-DARM64)
+    # See https://github.com/dotnet/runtime/issues/78286
+    add_compile_definitions(HOST_ARM64)
 elseif (ISARM)
     add_compile_options(-DARM)
 endif()
+
+add_compile_definitions(OTEL_AUTO_VERSION_MAJOR=${OTEL_AUTO_VERSION_MAJOR})
+add_compile_definitions(OTEL_AUTO_VERSION_MINOR=${OTEL_AUTO_VERSION_MINOR})
+add_compile_definitions(OTEL_AUTO_VERSION_PATCH=${OTEL_AUTO_VERSION_PATCH})
 
 # ******************************************************
 # Suppress Warning on MacOS
@@ -169,6 +170,8 @@ endif()
 add_library("OpenTelemetry.AutoInstrumentation.Native.static" STATIC
         class_factory.cpp
         clr_helpers.cpp
+        continuous_profiler_clr_helpers.cpp
+        continuous_profiler.cpp
         cor_profiler_base.cpp
         cor_profiler.cpp
         il_rewriter_wrapper.cpp
@@ -184,10 +187,10 @@ add_library("OpenTelemetry.AutoInstrumentation.Native.static" STATIC
         rejit_work_offloader.cpp
         environment_variables_util.cpp
         method_rewriter.cpp
+        tracer_tokens.cpp
         lib/coreclr/src/pal/prebuilt/idl/corprof_i.cpp
         # Source dependencies retrievied via additional commands using git
         ${OUTPUT_DEPS_DIR}/fmt/libfmt.a
-        ${OUTPUT_DEPS_DIR}/json/include/nlohmann/json.hpp
         ${OUTPUT_DEPS_DIR}/re2/obj/libre2.a
 )
 
@@ -202,7 +205,6 @@ target_include_directories("OpenTelemetry.AutoInstrumentation.Native.static"
         PUBLIC lib/spdlog/include
         PUBLIC ${OUTPUT_DEPS_DIR}/fmt/include
         PUBLIC ${OUTPUT_DEPS_DIR}/re2
-        PUBLIC ${OUTPUT_DEPS_DIR}/json/include
 )
 
 # Define linker libraries

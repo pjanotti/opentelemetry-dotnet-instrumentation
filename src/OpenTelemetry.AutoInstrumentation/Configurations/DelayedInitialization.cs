@@ -1,18 +1,5 @@
-// <copyright file="DelayedInitialization.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
 using OpenTelemetry.AutoInstrumentation.Loading;
@@ -54,22 +41,23 @@ internal static class DelayedInitialization
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddSqlClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddSqlClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            new SqlClientInitializer(lazyInstrumentationLoader, pluginManager);
+            new SqlClientInitializer(lazyInstrumentationLoader, pluginManager, tracerSettings);
         }
 
 #if NET6_0_OR_GREATER
+
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddMySqlClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddEntityFrameworkCore(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            lazyInstrumentationLoader.Add(new MySqlDataInitializer(pluginManager));
+            lazyInstrumentationLoader.Add(new EntityFrameworkCoreInitializer(pluginManager, tracerSettings));
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddEntityFrameworkCore(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddGraphQL(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            lazyInstrumentationLoader.Add(new EntityFrameworkCoreInitializer(pluginManager));
+            lazyInstrumentationLoader.Add(new GraphQLInitializer(pluginManager, tracerSettings));
         }
 #endif
 
@@ -90,9 +78,9 @@ internal static class DelayedInitialization
     {
 #if NETFRAMEWORK
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddAspNet(LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static void AddAspNet(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
         {
-            new AspNetMetricsInitializer(lazyInstrumentationLoader);
+            new AspNetMetricsInitializer(lazyInstrumentationLoader, pluginManager);
         }
 #endif
 

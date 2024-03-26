@@ -1,18 +1,5 @@
-// <copyright file="WcfTestsBase.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Net.Sockets;
 using FluentAssertions;
@@ -21,13 +8,16 @@ using Xunit.Abstractions;
 using static OpenTelemetry.Proto.Trace.V1.Span.Types;
 
 namespace IntegrationTests;
+
 public abstract class WcfTestsBase : TestHelper, IDisposable
 {
+    private readonly string _testAppName;
     private ProcessHelper? _serverProcess;
 
     protected WcfTestsBase(string testAppName, ITestOutputHelper output)
         : base(testAppName, output)
     {
+        _testAppName = testAppName;
     }
 
     public void Dispose()
@@ -55,13 +45,8 @@ public abstract class WcfTestsBase : TestHelper, IDisposable
     {
         EnvironmentTools.IsWindowsAdministrator().Should().BeTrue(); // WCF Server needs admin
 
-        using var collector = new MockSpansCollector(Output);
+        var collector = new MockSpansCollector(Output);
         SetExporter(collector);
-        // the test app makes 2 calls (therefore we expect 4 spans)
-        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Server, "Server 1");
-        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Client, "Client 1");
-        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Server, "Server 2");
-        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Client, "Client 2");
 
         var serverHelper = new WcfServerTestHelper(Output);
         _serverProcess = serverHelper.RunWcfServer(collector);
@@ -71,6 +56,16 @@ public abstract class WcfTestsBase : TestHelper, IDisposable
         {
             PackageVersion = clientPackageVersion
         });
+
+        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Server, "Server 1");
+        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Client, "Client 1");
+        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Server, "Server 2");
+        collector.Expect("OpenTelemetry.Instrumentation.Wcf", span => span.Kind == SpanKind.Client, "Client 2");
+
+        collector.Expect($"TestApplication.{_testAppName}", span => span.Kind == SpanKind.Internal, "Custom parent");
+        collector.Expect($"TestApplication.{_testAppName}", span => span.Kind == SpanKind.Internal, "Custom sibling");
+
+        collector.ExpectCollected(WcfClientInstrumentation.ValidateExpectedSpanHierarchy);
 
         collector.AssertExpectations();
     }

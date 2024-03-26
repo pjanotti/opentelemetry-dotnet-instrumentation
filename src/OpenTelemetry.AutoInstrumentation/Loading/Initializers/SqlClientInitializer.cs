@@ -1,19 +1,7 @@
-// <copyright file="SqlClientInitializer.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
+using OpenTelemetry.AutoInstrumentation.Configurations;
 using OpenTelemetry.AutoInstrumentation.Plugins;
 
 namespace OpenTelemetry.AutoInstrumentation.Loading.Initializers;
@@ -21,12 +9,15 @@ namespace OpenTelemetry.AutoInstrumentation.Loading.Initializers;
 internal class SqlClientInitializer
 {
     private readonly PluginManager _pluginManager;
+    private readonly TracerSettings _tracerSettings;
 
     private int _initialized;
 
-    public SqlClientInitializer(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+    public SqlClientInitializer(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
     {
         _pluginManager = pluginManager;
+        _tracerSettings = tracerSettings;
+        lazyInstrumentationLoader.Add(new GenericInitializer("System.Data.SqlClient", InitializeOnFirstCall));
         lazyInstrumentationLoader.Add(new GenericInitializer("Microsoft.Data.SqlClient", InitializeOnFirstCall));
 
 #if NETFRAMEWORK
@@ -44,7 +35,10 @@ internal class SqlClientInitializer
 
         var instrumentationType = Type.GetType("OpenTelemetry.Instrumentation.SqlClient.SqlClientInstrumentation, OpenTelemetry.Instrumentation.SqlClient")!;
 
-        var options = new OpenTelemetry.Instrumentation.SqlClient.SqlClientInstrumentationOptions();
+        var options = new OpenTelemetry.Instrumentation.SqlClient.SqlClientTraceInstrumentationOptions
+        {
+            SetDbStatementForText = _tracerSettings.InstrumentationOptions.SqlClientSetDbStatementForText
+        };
         _pluginManager.ConfigureTracesOptions(options);
 
         var instrumentation = Activator.CreateInstance(instrumentationType, options)!;

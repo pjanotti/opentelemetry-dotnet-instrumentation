@@ -1,18 +1,5 @@
-// <copyright file="HttpClientInitializer.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Reflection;
 using OpenTelemetry.AutoInstrumentation.Plugins;
@@ -44,13 +31,13 @@ internal class HttpClientInitializer
             return;
         }
 
-        var options = new OpenTelemetry.Instrumentation.Http.HttpClientInstrumentationOptions();
+        var options = new OpenTelemetry.Instrumentation.Http.HttpClientTraceInstrumentationOptions();
         _pluginManager.ConfigureTracesOptions(options);
 
 #if NETFRAMEWORK
         var instrumentationType = Type.GetType("OpenTelemetry.Instrumentation.Http.Implementation.HttpWebRequestActivitySource, OpenTelemetry.Instrumentation.Http")!;
 
-        instrumentationType.GetField("Options", BindingFlags.NonPublic | BindingFlags.Static)?.SetValue(null, options);
+        instrumentationType.GetProperty("TracingOptions", BindingFlags.NonPublic | BindingFlags.Static)?.SetValue(null, options);
 #else
         var instrumentationType = Type.GetType("OpenTelemetry.Instrumentation.Http.HttpClientInstrumentation, OpenTelemetry.Instrumentation.Http")!;
         var instrumentation = Activator.CreateInstance(instrumentationType, options)!;

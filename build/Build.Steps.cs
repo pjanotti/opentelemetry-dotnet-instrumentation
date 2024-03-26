@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Extensions;
@@ -11,6 +12,7 @@ using Nuke.Common.Tools.MSBuild;
 using Nuke.Common.Tools.Npm;
 using Nuke.Common.Tools.NuGet;
 using Nuke.Common.Utilities.Collections;
+using Serilog;
 using static Nuke.Common.EnvironmentInfo;
 using static Nuke.Common.IO.FileSystemTasks;
 using static Nuke.Common.Tools.DotNet.DotNetTasks;
@@ -24,8 +26,8 @@ partial class Build
     AbsolutePath TestsDirectory => RootDirectory / "test";
 
     AbsolutePath TracerHomeDirectory => TracerHome ?? (OutputDirectory / "tracer-home");
-    AbsolutePath BuildDataDirectory => RootDirectory / "build_data";
-    AbsolutePath ProfilerTestLogs => BuildDataDirectory / "profiler-logs";
+    AbsolutePath TestArtifactsDirectory => RootDirectory / "test-artifacts";
+    AbsolutePath ProfilerTestLogs => TestArtifactsDirectory / "profiler-logs";
     AbsolutePath AdditionalDepsDirectory => TracerHomeDirectory / "AdditionalDeps";
     AbsolutePath StoreDirectory => TracerHomeDirectory / "store";
 
@@ -47,9 +49,11 @@ partial class Build
     };
 
     private static readonly IEnumerable<TargetFramework> TestFrameworks = TargetFrameworks
-        .Concat(new[] {
-            TargetFramework.NET7_0
-        });
+        .Concat(TargetFramework.NET7_0
+#if  NET8_0_OR_GREATER
+            , TargetFramework.NET8_0
+#endif
+            );
 
     Target CreateRequiredDirectories => _ => _
         .Unlisted()
@@ -57,7 +61,7 @@ partial class Build
         {
             TracerHomeDirectory.CreateDirectory();
             NuGetArtifactsDirectory.CreateDirectory();
-            BuildDataDirectory.CreateDirectory();
+            TestArtifactsDirectory.CreateDirectory();
             ProfilerTestLogs.CreateDirectory();
         });
 
@@ -70,14 +74,14 @@ partial class Build
 
             if (IsWin)
             {
-                projectsToRestore = projectsToRestore.Concat(Solution.GetWindowsOnlyTestApplications());
+                projectsToRestore = projectsToRestore.Concat(Solution.GetNetFrameworkOnlyTestApplications());
             }
 
             foreach (var project in projectsToRestore)
             {
                 DotNetRestoreSettings Restore(DotNetRestoreSettings s) =>
                     s.SetProjectFile(project)
-                        .SetVerbosity(DotNetVerbosity.Normal)
+                        .SetVerbosity(DotNetVerbosity.normal)
                         .SetProperty("configuration", BuildConfiguration.ToString())
                         .SetPlatform(Platform)
                         .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o => o.SetPackageDirectory(NuGetPackagesDirectory));
@@ -86,8 +90,7 @@ partial class Build
                 {
                     DotNetRestore(s =>
                          Restore(s)
-                        .CombineWith(libraryVersions, (p, libraryVersion) =>
-                                p.SetProperty("LibraryVersion", libraryVersion)));
+                         .CombineWithBuildInfos(libraryVersions));
                 }
                 else
                 {
@@ -99,19 +102,10 @@ partial class Build
             {
                 // Projects using `packages.config` can't be restored via "dotnet restore", use a NuGet Task to restore these projects.
                 var legacyRestoreProjects = Solution.GetNativeProjects()
-                    .Concat(new[] { Solution.GetProjectByName(Projects.Tests.Applications.AspNet) })
-                    .Concat(new[] { Solution.GetProjectByName(Projects.Tests.Applications.Wcf) });
+                    .Concat(Solution.GetProjectByName(Projects.Tests.Applications.AspNet))
+                    .Concat(Solution.GetProjectByName(Projects.Tests.Applications.WcfIis));
 
-                foreach (var project in legacyRestoreProjects)
-                {
-                    // Restore legacy projects
-                    NuGetTasks.NuGetRestore(s => s
-                        .SetTargetPath(project)
-                        .SetSolutionDirectory(Solution.Directory)
-                        .SetVerbosity(NuGetVerbosity.Normal)
-                        .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o =>
-                            o.SetPackagesDirectory(NuGetPackagesDirectory)));
-                }
+                RestoreLegacyNuGetPackagesConfig(legacyRestoreProjects);
             }
         }));
 
@@ -128,35 +122,88 @@ partial class Build
                 DotNetBuild(x => x
                     .SetProjectFile(project)
                     .SetConfiguration(BuildConfiguration)
-                    .EnableNoRestore());
+                    .SetNoRestore(NoRestore));
             }
         });
 
     Target CompileManagedTests => _ => _
         .Description("Compiles the managed code in the test directory")
         .After(CompileManagedSrc)
+        .After(CompileNativeDependenciesForManagedTests)
         .Executes(() =>
         {
             var testApps = Solution.GetCrossPlatformTestApplications();
             if (IsWin)
             {
-                testApps = testApps.Concat(Solution.GetWindowsOnlyTestApplications());
+                if (TestTargetFramework == TargetFramework.NET462 ||
+                    TestTargetFramework == TargetFramework.NOT_SPECIFIED)
+                {
+                    testApps = Solution.GetNetFrameworkOnlyTestApplications().Concat(testApps);
+                }
+                else
+                {
+                    // Special case: some WCF .NET tests need a WCF server app that only builds for .NET Framework 4.6.2
+                    DotNetBuild(s => s
+                        .SetProjectFile(Solution.GetProjectByName(Projects.Tests.Applications.WcfServer))
+                        .SetConfiguration(BuildConfiguration)
+                        .SetPlatform(Platform)
+                        .SetNoRestore(NoRestore)
+                        .SetFramework(TargetFramework.NET462));
+                }
             }
 
             foreach (var app in testApps)
             {
+
+                // Special case: a test application using old packages.config needs special treatment.
+                var legacyPackagesConfig = app.Directory.ContainsFile("packages.config");
+                if (legacyPackagesConfig)
+                {
+                    PerformLegacyRestoreIfNeeded(app);
+
+                    DotNetBuild(s => s
+                        .SetProjectFile(app)
+                        .SetNoRestore(true)  // project w/ packages.config can't do the restore via dotnet CLI
+                        .SetPlatform(Platform)
+                        .SetConfiguration(BuildConfiguration)
+                        .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                            x => x.SetFramework(TestTargetFramework)));
+
+                    continue;
+                }
+
+                string actualTestTfm = TestTargetFramework;
+                if (TestTargetFramework != TargetFramework.NOT_SPECIFIED &&
+                    !app.GetTargetFrameworks().Contains(actualTestTfm))
+                {
+                    // Before skipping this app check if not a special case for .NET Framework
+                    actualTestTfm = null;
+                    if (TestTargetFramework == TargetFramework.NET462)
+                    {
+                        actualTestTfm = app.GetTargetFrameworks().FirstOrDefault(tfm => tfm.StartsWith("net4"));
+                    }
+
+                    if (actualTestTfm is null)
+                    {
+                        // App doesn't support the select TFM, skip it.
+                        Log.Information("Skipping {0}: no suitable TFM for {1}", app.Name, TestTargetFramework);
+                        continue;
+                    }
+                }
+
                 DotNetBuildSettings BuildTestApplication(DotNetBuildSettings x) =>
                     x.SetProjectFile(app)
                         .SetConfiguration(BuildConfiguration)
                         .SetPlatform(Platform)
-                        .SetNoRestore(true);
+                        .SetNoRestore(NoRestore)
+                        .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                            s => s.SetFramework(actualTestTfm));
 
                 if (LibraryVersion.Versions.TryGetValue(app.Name, out var libraryVersions))
                 {
                     DotNetBuild(x =>
                          BuildTestApplication(x)
-                        .CombineWith(libraryVersions, (p, libraryVersion) =>
-                            p.SetProperty("LibraryVersion", libraryVersion)));
+                         .CombineWithBuildInfos(libraryVersions, TestTargetFramework));
                 }
                 else
                 {
@@ -166,13 +213,28 @@ partial class Build
 
             foreach (var project in Solution.GetManagedTestProjects())
             {
+                if (TestTargetFramework != TargetFramework.NOT_SPECIFIED &&
+                    !project.GetTargetFrameworks().Contains(TestTargetFramework))
+                {
+                    // Skip this test project if it doesn't support the selected test TFM.
+                    continue;
+                }
+
                 // Always AnyCPU
                 DotNetBuild(x => x
                     .SetProjectFile(project)
                     .SetConfiguration(BuildConfiguration)
-                    .SetNoRestore(true));
+                    .SetNoRestore(NoRestore)
+                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                        s => s.SetFramework(TestTargetFramework)));
             }
         });
+
+    Target CompileNativeDependenciesForManagedTests => _ => _
+        .Description("Compiles the native dependencies for testing applications")
+        .DependsOn(CompileNativeDependenciesForManagedTestsWindows)
+        .DependsOn(CompileNativeDependenciesForManagedTestsLinux)
+        .DependsOn(CompileNativeDependenciesForManagedTestsMacOs);
 
     Target CompileNativeSrc => _ => _
         .Description("Compiles the native loader")
@@ -212,7 +274,7 @@ partial class Build
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
-                .EnableNoRestore()
+                .SetNoRestore(NoRestore)
                 .CombineWith(targetFrameworks, (p, framework) => p
                     .SetFramework(framework)
                     .SetOutput(TracerHomeDirectory / MapToFolderOutput(framework))));
@@ -225,7 +287,7 @@ partial class Build
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
-                .EnableNoRestore()
+                .SetNoRestore(NoRestore)
                 .SetFramework(TargetFramework.NETCore3_1)
                 .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NETCore3_1)));
 
@@ -235,7 +297,7 @@ partial class Build
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
-                .EnableNoRestore()
+                .SetNoRestore(NoRestore)
                 .SetFramework(TargetFramework.NET6_0)
                 .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NET6_0)));
 
@@ -244,18 +306,55 @@ partial class Build
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
-                .EnableNoRestore()
+                .SetNoRestore(NoRestore)
                 .SetFramework(TargetFramework.NET6_0)
                 .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NET6_0)));
 
-            // Remove non-library files
-            TracerHomeDirectory.GlobFiles("**/*.xml").ForEach(file => file.DeleteFile());
-            (TracerHomeDirectory / "net").GlobFiles("*.json").ForEach(file => file.DeleteFile());
-            if (IsWin)
-            {
-                (TracerHomeDirectory / "netfx").GlobFiles("*.json").ForEach(file => file.DeleteFile());
-            }
+            RemoveFilesInNetFolderAvailableInAdditionalStore();
+
+            RemoveNonLibraryFilesFromOutput();
         });
+
+    void RemoveNonLibraryFilesFromOutput()
+    {
+        TracerHomeDirectory.GlobFiles("**/*.xml").ForEach(file => file.DeleteFile());
+        (TracerHomeDirectory / "net").GlobFiles("*.json").ForEach(file => file.DeleteFile());
+        if (IsWin)
+        {
+            (TracerHomeDirectory / "netfx").GlobFiles("*.json").ForEach(file => file.DeleteFile());
+        }
+    }
+
+    void RemoveFilesInNetFolderAvailableInAdditionalStore()
+    {
+        Log.Debug("Removing files available in additional store from net folder");
+        var netFolder = TracerHomeDirectory / "net";
+        var additionalStoreFolder = TracerHomeDirectory / "store";
+
+        var netLibraries = netFolder.GlobFiles("**/*.dll");
+        var netLibrariesByName = netLibraries.ToDictionary(x => x.Name);
+        var additionalStoreLibraries = additionalStoreFolder.GlobFiles("**/*.dll");
+
+        foreach (var additionalStoreLibrary in additionalStoreLibraries)
+        {
+            if (netLibrariesByName.TryGetValue(additionalStoreLibrary.Name, out var netLibrary))
+            {
+                var netLibraryFileVersionInfo = FileVersionInfo.GetVersionInfo(netLibrary);
+                var additionalStoreLibraryFileVersionInfo = FileVersionInfo.GetVersionInfo(additionalStoreLibrary);
+
+                if (netLibraryFileVersionInfo.FileVersion == additionalStoreLibraryFileVersionInfo.FileVersion)
+                {
+                    Log.Debug("Delete file available in additional store from net folder " + additionalStoreLibrary.Name + " version: " + netLibraryFileVersionInfo.FileVersion);
+                    netLibrary.DeleteFile();
+                    netLibrariesByName.Remove(additionalStoreLibrary.Name);
+                }
+                else
+                {
+                    Log.Warning("Cannot remove file available in additional store from net folder " + additionalStoreLibrary.Name + " net folder version: " + netLibraryFileVersionInfo.FileVersion + " additional store version: " + additionalStoreLibraryFileVersionInfo.FileVersion);
+                }
+            }
+        }
+    }
 
     Target PublishNativeProfiler => _ => _
         .Unlisted()
@@ -302,7 +401,7 @@ partial class Build
 
     Target RunManagedTests => _ => _
         .Unlisted()
-        .Produces(BuildDataDirectory / "profiler-logs" / "*")
+        .Produces(TestArtifactsDirectory / "profiler-logs" / "*")
         .After(BuildTracer)
         .After(CompileManagedTests)
         .After(PublishMocks)
@@ -320,13 +419,23 @@ partial class Build
             var targetFrameworks = IsWin
                 ? TargetFrameworks
                 : TargetFrameworks.ExceptNetFramework();
+            if (TestTargetFramework != TargetFramework.NOT_SPECIFIED)
+            {
+                if (!targetFrameworks.Contains(TestTargetFramework))
+                {
+                    // This test doesn't run for the selected test TFM, nothing to do.
+                    return;
+                }
+
+                targetFrameworks = new[] { TestTargetFramework };
+            }
 
             DotNetPublish(s => s
                 .SetProject(Solution.GetTestMock())
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
-                .EnableNoRestore()
+                .SetNoRestore(NoRestore)
                 .CombineWith(targetFrameworks, (p, framework) => p
                     .SetFramework(framework)
                     .SetOutput(TestsDirectory / Projects.Tests.AutoInstrumentationLoaderTests / "bin" / BuildConfiguration / "Profiler" / framework)));
@@ -339,7 +448,9 @@ partial class Build
             DotNetBuild(x => x
                 .SetProjectFile(Solution.GetProjectByName(Projects.Mocks.AutoInstrumentationMock))
                 .SetConfiguration(BuildConfiguration)
-                .SetNoRestore(true)
+                .SetNoRestore(NoRestore)
+                .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                    s => s.SetFramework(TestTargetFramework))
             );
         });
 
@@ -352,6 +463,7 @@ partial class Build
             var unitTestProjects = new[]
             {
                 Solution.GetProjectByName(Projects.Tests.AutoInstrumentationLoaderTests),
+                Solution.GetProjectByName(Projects.Tests.AutoInstrumentationStartupHookTests),
                 Solution.GetProjectByName(Projects.Tests.AutoInstrumentationTests)
             };
 
@@ -366,14 +478,26 @@ partial class Build
                 }
             }
 
+            if (TestTargetFramework != TargetFramework.NOT_SPECIFIED)
+            {
+                unitTestProjects = unitTestProjects
+                    .Where(p =>
+                        p.GetTargetFrameworks().Contains(TestTargetFramework) &&
+                        (p.Name != Projects.Tests.AutoInstrumentationLoaderTests || TargetFrameworks.Contains(TestTargetFramework)))
+                    .ToArray();
+            }
+
             for (int i = 0; i < TestCount; i++)
             {
                 DotNetTest(config => config
                     .SetConfiguration(BuildConfiguration)
                     .SetTargetPlatformAnyCPU()
                     .SetFilter(TestNameFilter())
-                    .EnableNoRestore()
+                    .SetNoRestore(NoRestore)
+                    .SetProcessEnvironmentVariable("OTEL_DOTNET_AUTO_LOG_DIRECTORY", ProfilerTestLogs)
                     .EnableNoBuild()
+                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                        x => x.SetFramework(TestTargetFramework))
                     .CombineWith(unitTestProjects, (s, project) => s
                         .EnableTrxLogOutput(GetResultsDirectory(project))
                         .SetProjectFile(project)), degreeOfParallelism: 4);
@@ -392,8 +516,6 @@ partial class Build
                 return;
             }
 
-            var frameworks = IsWin ? TestFrameworks : TestFrameworks.ExceptNetFramework();
-
             for (int i = 0; i < TestCount; i++)
             {
                 DotNetMSBuild(config => config
@@ -402,7 +524,9 @@ partial class Build
                     .SetBlameHangTimeout("5m")
                     .EnableTrxLogOutput(GetResultsDirectory(project))
                     .SetTargetPath(project)
-                    .DisableRestore()
+                    .SetRestore(!NoRestore)
+                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                        s => s.SetProperty("TargetFramework", TestTargetFramework.ToString()))
                     .RunTests()
                 );
             }
@@ -428,9 +552,10 @@ partial class Build
                 .SetProject(Solution.GetProjectByName(Projects.AutoInstrumentationAdditionalDeps))
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
+                .SetProperty("NukePlatform", Platform)
                 .SetProperty("TracerHomePath", TracerHomeDirectory)
                 .EnableNoBuild()
-                .EnableNoRestore()
+                .SetNoRestore(NoRestore)
                 .CombineWith(TestFrameworks.ExceptNetFramework(), (p, framework) => p
                 .SetFramework(framework)
                 // Additional-deps probes the directory using SemVer format.
@@ -445,21 +570,27 @@ partial class Build
                     var depsJson = JsonNode.Parse(rawJson).AsObject();
 
                     var folderRuntimeName = depsJson.GetFolderRuntimeName();
-                    var architectureStores = new List<AbsolutePath>
-                    {
-                        StoreDirectory / "x64" / folderRuntimeName,
-                        StoreDirectory / "x86" / folderRuntimeName,
-                    }.AsReadOnly();
+                    var architectureStores = new List<AbsolutePath>()
+                        .AddIf(StoreDirectory / "x64" / folderRuntimeName, RuntimeInformation.OSArchitecture == Architecture.X64)
+                        .AddIf(StoreDirectory / "x86" / folderRuntimeName, IsWin) // Only Windows supports x86 runtime
+                        .AddIf(StoreDirectory / "arm64" / folderRuntimeName, IsArm64)
+                        .AsReadOnly();
 
                     depsJson.CopyNativeDependenciesToStore(file, architectureStores);
+                    depsJson.RemoveDuplicatedLibraries(architectureStores);
                     depsJson.RemoveOpenTelemetryLibraries();
 
+                    // To allow roll forward for applications, like Roslyn, that target one tfm
+                    // but have a later runtime move the libraries under the original tfm folder
+                    // to the latest one.
                     if (folderRuntimeName == TargetFramework.NET6_0)
                     {
-                        // To allow roll forward for applications, like Roslyn, that target one tfm
-                        // but have a later runtime move the libraries under the original tfm folder
-                        // to the latest one.
-                        depsJson.RollFrameworkForward(TargetFramework.NET6_0, TargetFramework.NET7_0, architectureStores);
+                        depsJson.RollFrameworkForward(TargetFramework.NET6_0, TargetFramework.NET8_0, architectureStores);
+                    }
+                    else if (folderRuntimeName == TargetFramework.NET7_0 || folderRuntimeName == TargetFramework.NET8_0)
+                    {
+                        depsJson.RollFrameworkForward(TargetFramework.NET6_0, TargetFramework.NET8_0, architectureStores);
+                        depsJson.RollFrameworkForward(TargetFramework.NET7_0, TargetFramework.NET8_0, architectureStores);
                     }
 
                     // Write the updated deps.json file.
@@ -480,16 +611,17 @@ partial class Build
         .Executes(() =>
         {
             var netPath = TracerHomeDirectory / "net";
-            var fileInfoList = new List<object>();
             var files = Directory.GetFiles(netPath);
+            var fileInfoList = new List<object>(files.Length);
 
             foreach (string file in files)
             {
                 var fileName = Path.GetFileNameWithoutExtension(file);
-                var fileVersion = FileVersionInfo.GetVersionInfo(file).FileVersion;
 
-                if (fileName.StartsWith("OpenTelemetry.") && !fileName.StartsWith("OpenTelemetry.Api") && !fileName.StartsWith("OpenTelemetry.AutoInstrumentation"))
+                if (fileName == "System.Diagnostics.DiagnosticSource" ||
+                    (fileName.StartsWith("OpenTelemetry.") && !fileName.StartsWith("OpenTelemetry.Api") && !fileName.StartsWith("OpenTelemetry.AutoInstrumentation")))
                 {
+                    var fileVersion = FileVersionInfo.GetVersionInfo(file).FileVersion;
                     fileInfoList.Add(new
                     {
                         FileName = fileName,
@@ -498,8 +630,15 @@ partial class Build
                 }
             }
 
-            string jsonContent = JsonSerializer.Serialize(fileInfoList);
-            File.WriteAllText(Path.Combine(netPath, "ruleEngine.json"), jsonContent);
+            JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = true };
+            string jsonContent = JsonSerializer.Serialize(fileInfoList, options);
+
+            var ruleEngineJsonFilePath = netPath / "ruleEngine.json";
+            File.WriteAllText(ruleEngineJsonFilePath, jsonContent);
+
+            var ruleEngineJsonNugetFilePath = RootDirectory / "nuget" / "OpenTelemetry.AutoInstrumentation" / "contentFiles" / "any" / "any" / "RuleEngine.json";
+            File.Delete(ruleEngineJsonNugetFilePath);
+            File.Copy(ruleEngineJsonFilePath, ruleEngineJsonNugetFilePath);
         });
 
     Target InstallDocumentationTools => _ => _
@@ -538,7 +677,7 @@ partial class Build
         .DependsOn(MarkdownLint)
         .DependsOn(SpellcheckDocumentation);
 
-    private AbsolutePath GetResultsDirectory(Project proj) => BuildDataDirectory / "results" / proj.Name;
+    private AbsolutePath GetResultsDirectory(Project proj) => TestArtifactsDirectory / "results" / proj.Name;
 
     /// <summary>
     /// Bootstrapping tests require every single test to be run in a separate process
@@ -568,11 +707,13 @@ partial class Build
                 DotNetTest(config => config
                     .SetConfiguration(BuildConfiguration)
                     .SetTargetPlatformAnyCPU()
-                    .EnableNoRestore()
+                    .SetNoRestore(NoRestore)
                     .EnableNoBuild()
                     .EnableTrxLogOutput(GetResultsDirectory(project))
                     .SetProjectFile(project)
                     .SetFilter(AndFilter(TestNameFilter(), testName))
+                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED, s => s.SetFramework(TestTargetFramework))
+                    .SetProcessEnvironmentVariable("OTEL_DOTNET_AUTO_LOG_DIRECTORY", ProfilerTestLogs)
                     .SetProcessEnvironmentVariable("BOOSTRAPPING_TESTS", "true"));
             }
         }
@@ -581,5 +722,19 @@ partial class Build
     private string MapToFolderOutput(TargetFramework targetFramework)
     {
         return targetFramework.ToString().StartsWith("net4") ? "netfx" : "net";
+    }
+
+    private void RestoreLegacyNuGetPackagesConfig(IEnumerable<Project> legacyRestoreProjects)
+    {
+        foreach (var project in legacyRestoreProjects)
+        {
+            // Restore legacy projects
+            NuGetTasks.NuGetRestore(s => s
+                .SetTargetPath(project)
+                .SetSolutionDirectory(Solution.Directory)
+                .SetVerbosity(NuGetVerbosity.Normal)
+                .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o =>
+                    o.SetPackagesDirectory(NuGetPackagesDirectory)));
+        }
     }
 }

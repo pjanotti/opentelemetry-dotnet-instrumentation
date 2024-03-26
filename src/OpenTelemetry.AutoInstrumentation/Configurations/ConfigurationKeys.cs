@@ -1,22 +1,8 @@
-// <copyright file="ConfigurationKeys.cs" company="OpenTelemetry Authors">
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// </copyright>
+// SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using OpenTelemetry.AutoInstrumentation.Instrumentations.GraphQL;
 using OpenTelemetry.Logs;
 
 namespace OpenTelemetry.AutoInstrumentation.Configurations;
@@ -26,6 +12,15 @@ namespace OpenTelemetry.AutoInstrumentation.Configurations;
 /// </summary>
 internal partial class ConfigurationKeys
 {
+    /// <summary>
+    /// Configuration key for enabling profiler.
+    /// </summary>
+#if NETFRAMEWORK
+    public const string ProfilingEnabled = "COR_ENABLE_PROFILING";
+#else
+    public const string ProfilingEnabled = "CORECLR_ENABLE_PROFILING";
+#endif
+
     /// <summary>
     /// Configuration key for the OTLP protocol to be used.
     /// Default is <c>"http/protobuf"</c>.
@@ -125,9 +120,20 @@ internal partial class ConfigurationKeys
         {
             /// <summary>
             /// Configuration key for GraphQL instrumentation to enable passing query as a document attribute.
-            /// See <see cref="GraphQLTags.Document"/>.
             /// </summary>
             public const string GraphQLSetDocument = "OTEL_DOTNET_AUTO_GRAPHQL_SET_DOCUMENT";
+
+            /// <summary>
+            /// Configuration key for SQL Client instrumentation to enable passing text query as a db.statement attribute.
+            /// </summary>
+            public const string SqlClientSetDbStatementForText = "OTEL_DOTNET_AUTO_SQLCLIENT_SET_DBSTATEMENT_FOR_TEXT";
+
+#if NET6_0_OR_GREATER
+            /// <summary>
+            /// Configuration key for Entity Framework Core instrumentation to enable passing text query as a db.statement attribute.
+            /// </summary>
+            public const string EntityFrameworkCoreSetDbStatementForText = "OTEL_DOTNET_AUTO_ENTITYFRAMEWORKCORE_SET_DBSTATEMENT_FOR_TEXT";
+#endif
         }
     }
 
