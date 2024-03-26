@@ -582,12 +582,14 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ModuleLoadFinished(ModuleID module_id, HR
     {
         // if module failed to load, skip it entirely,
         // otherwise we can crash the process if module is not valid
+        Logger::Warn("ModuleLoadFinished: Received a failed HRESULT ", hr_status);
         CorProfilerBase::ModuleLoadFinished(module_id, hr_status);
         return S_OK;
     }
 
     if (!is_attached_)
     {
+        Logger::Warn("ModuleLoadFinished: Profiler is NOT attached");
         return S_OK;
     }
 
@@ -598,12 +600,14 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ModuleLoadFinished(ModuleID module_id, HR
     // double check if is_attached_ has changed to avoid possible race condition with shutdown function
     if (!is_attached_ || rejit_handler == nullptr)
     {
+        Logger::Warn("ModuleLoadFinished: Profiler is NOT attached OR rejit_handler is nullptr");
         return S_OK;
     }
 
     const auto& module_info = GetModuleInfo(this->info_, module_id);
     if (!module_info.IsValid())
     {
+        Logger::Warn("ModuleLoadFinished: Failed to get module info ", module_id, " ", hr_status);
         return S_OK;
     }
 
@@ -809,6 +813,7 @@ HRESULT STDMETHODCALLTYPE CorProfiler::ModuleLoadFinished(ModuleID module_id, HR
         }
     }
 
+    Logger::Debug("ModuleLoadFinished: returning S_OK ", module_info.assembly.name);
     return S_OK;
 }
 

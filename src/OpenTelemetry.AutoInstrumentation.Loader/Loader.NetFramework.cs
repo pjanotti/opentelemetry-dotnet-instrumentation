@@ -22,6 +22,8 @@ internal partial class Loader
     private static Assembly? AssemblyResolve_ManagedProfilerDependencies(object sender, ResolveEventArgs args)
     {
         var assemblyName = new AssemblyName(args.Name).Name;
+        var threadInfo = $"[tid:{Thread.CurrentThread.ManagedThreadId}][{AppDomain.CurrentDomain.FriendlyName}][{AppDomain.CurrentDomain.Id}]";
+        Logger.Debug("{0} => Requester [{1}] requested [{2}]", threadInfo, args?.RequestingAssembly?.FullName ?? "<null>", args?.Name ?? "<null>");
 
         // On .NET Framework, having a non-US locale can cause mscorlib
         // to enter the AssemblyResolve event when searching for resources
@@ -30,22 +32,22 @@ internal partial class Loader
         if (string.Equals(assemblyName, "mscorlib.resources", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(assemblyName, "System.Net.Http", StringComparison.OrdinalIgnoreCase))
         {
+            Logger.Debug("{0} => Skipping assembly resolution for [{1}]", threadInfo, assemblyName);
             return null;
         }
 
-        Logger.Debug("Requester [{0}] requested [{1}]", args?.RequestingAssembly?.FullName ?? "<null>", args?.Name ?? "<null>");
         var path = Path.Combine(ManagedProfilerDirectory, $"{assemblyName}.dll");
         if (File.Exists(path))
         {
             try
             {
                 var loadedAssembly = Assembly.LoadFrom(path);
-                Logger.Debug<string, bool>("Assembly.LoadFrom(\"{0}\") succeeded={1}", path, loadedAssembly != null);
+                Logger.Debug<string, string, bool>("{0} => Assembly.LoadFrom(\"{1}\") succeeded={2}", threadInfo, path, loadedAssembly != null);
                 return loadedAssembly;
             }
             catch (Exception ex)
             {
-                Logger.Debug(ex, "Assembly.LoadFrom(\"{0}\") Exception: {1}", path, ex.Message);
+                Logger.Debug(ex, "{0} => Assembly.LoadFrom(\"{1}\") Exception: {2}", threadInfo, path, ex.Message);
             }
         }
 
