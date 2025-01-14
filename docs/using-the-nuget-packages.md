@@ -2,7 +2,9 @@
 
 ## When to use the NuGet packages
 
-Use the NuGet packages in the following scenarios:
+The NuGet packages are the recommended way to deploy automatic instrumentation,
+but they can't be used in all cases. Use the NuGet packages in the following
+scenarios:
 
 1. Simplify deployment. For example, a container running a single application.
 1. Support instrumentation of [`self-contained`](https://learn.microsoft.com/en-us/dotnet/core/deploying/#publish-self-contained)
@@ -14,7 +16,7 @@ Use the NuGet packages in the following scenarios:
 
 ## Limitations
 
-While NuGet packages are a convenient way to deploy automatic
+While NuGet packages are the recommended way to deploy automatic
 instrumentation, they can't be used in all cases. The most common
 reasons for not using NuGet packages include the following:
 
@@ -40,7 +42,7 @@ you to either add the missing instrumentation package or to skip the
 instrumentation of the corresponding package:
 
 ```terminal
-~packages/opentelemetry.autoinstrumentation.buildtasks/1.4.0/build/OpenTelemetry.AutoInstrumentation.BuildTasks.targets(29,5): error : OpenTelemetry.AutoInstrumentation: add a reference to the instrumentation package 'MongoDB.Driver.Core.Extensions.DiagnosticSources' version 1.4.0 or add 'MongoDB.Driver.Core' to the property 'SkippedInstrumentations' to suppress this error.
+~packages/opentelemetry.autoinstrumentation.buildtasks/1.9.0/build/OpenTelemetry.AutoInstrumentation.BuildTasks.targets(29,5): error : OpenTelemetry.AutoInstrumentation: add a reference to the instrumentation package 'OpenTelemetry.Instrumentation.StackExchangeRedis' version 1.9.0-beta.1 or add 'StackExchange.Redis' to the property 'SkippedInstrumentations' to suppress this error.
 ```
 
 To resolve the error either add the recommended instrumentation package or skip
@@ -49,7 +51,7 @@ property, example:
 
 ```csproj
   <PropertyGroup>
-    <SkippedInstrumentations>MongoDB.Driver.Core;StackExchange.Redis</SkippedInstrumentations>
+    <SkippedInstrumentations>StackExchange.Redis</SkippedInstrumentations>
   </PropertyGroup>
 ```
 
@@ -57,7 +59,7 @@ The same property can be also specified directly via the CLI, notice that the
 separator, `;`, needs to be properly escaped as '%3B':
 
 ```powershell
-  dotnet build -p:SkippedInstrumentations=StackExchange.Redis%3BMongoDB.Driver.Core
+  dotnet build -p:SkippedInstrumentations=StackExchange.Redis
 ```
 
 To distribute the appropriate native runtime components with your .NET application,

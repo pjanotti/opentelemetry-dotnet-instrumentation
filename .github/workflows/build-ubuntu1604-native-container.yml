@@ -1,0 +1,36 @@
+name: Build on Ubuntu 16.04 Native Container
+
+on:
+  workflow_call:
+
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/packages
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build-ubuntu1604-native-container:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-20.04
+    timeout-minutes: 60
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # tag: v4.2.2
+      with:
+        fetch-depth: 0 # fetching all, needed to correctly calculate version
+
+    - name: Build native library in Docker container
+      run: |
+        set -e
+        docker build -t mybuildimage -f "./docker/ubuntu1604.dockerfile" ./docker
+        docker run -e OS_TYPE=linux-glibc --rm --mount type=bind,source="${GITHUB_WORKSPACE}",target=/project mybuildimage \
+          /bin/sh -c 'export PATH="$PATH:/usr/share/dotnet" && git config --global --add safe.directory /project && ./build.sh BuildNativeWorkflow'
+
+    - name: Publish native library Linux build
+      if: (${{ job.status }} != 'cancelled')
+      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # tag: v4.6.0
+      with:
+        name: bin-ubuntu1604-native
+        path: bin/tracer-home
+      continue-on-error: true

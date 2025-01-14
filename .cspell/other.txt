@@ -5,6 +5,7 @@ bitness
 bytecode
 cmake
 Codespaces
+Contoso
 coreutils
 corhlpr
 Couchbase
@@ -28,8 +29,10 @@ MASSTRANSIT
 metricsexporter
 mkdir
 mktemp
+monocytogenes
 MSMQ
 myapp
+mycompanymyproductmylibrary
 MYSQLCONNECTOR
 MYSQLDATA
 NETRUNTIME
@@ -37,6 +40,8 @@ Npgsql
 NSERVICEBUS
 omnisharp
 OPENTRACING
+OPERATINGSYSTEM
+ORACLEMDA
 OTEL_DOTNET_AUTO_FLUSH_ON_UNHANDLEDEXCEPTION
 OWIN
 pipefail
@@ -45,6 +50,7 @@ PROCESSRUNTIME
 proto
 protobuf
 protos
+RABBITMQ
 Serilog
 spdlog
 SQLCLIENT

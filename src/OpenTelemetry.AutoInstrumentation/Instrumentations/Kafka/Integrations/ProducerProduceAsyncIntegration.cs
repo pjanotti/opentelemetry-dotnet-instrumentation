@@ -17,7 +17,7 @@ namespace OpenTelemetry.AutoInstrumentation.Instrumentations.Kafka.Integrations;
 assemblyName: IntegrationConstants.ConfluentKafkaAssemblyName,
 typeName: IntegrationConstants.ProducerTypeName,
 methodName: IntegrationConstants.ProduceAsyncMethodName,
-returnTypeName: ClrNames.GenericTask,
+returnTypeName: IntegrationConstants.TaskOfDeliveryReportTypeName,
 parameterTypeNames: new[] { IntegrationConstants.TopicPartitionTypeName, IntegrationConstants.MessageTypeName, ClrNames.CancellationToken },
 minimumVersion: IntegrationConstants.MinVersion,
 maximumVersion: IntegrationConstants.MaxVersion,
@@ -39,7 +39,7 @@ public static class ProducerProduceAsyncIntegration
         var activity = KafkaInstrumentation.StartProducerActivity(topicPartition.DuckCast<ITopicPartition>(), message, instance.DuckCast<INamedClient>()!);
         if (activity is not null)
         {
-            KafkaInstrumentation.InjectContext<TTopicPartition>(message, activity);
+            KafkaInstrumentation.InjectContext<TTopicPartition, TMessage>(message, activity);
             return new CallTargetState(activity);
         }
 

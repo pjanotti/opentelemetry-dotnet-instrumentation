@@ -1,17 +1,19 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#if NET6_0_OR_GREATER
+#if NET
 using System.Diagnostics;
 #endif
+using System.Reflection;
 using OpenTelemetry.AutoInstrumentation.Configurations;
-#if NET6_0_OR_GREATER
+#if NET
 using OpenTelemetry.AutoInstrumentation.ContinuousProfiler;
 #endif
 using OpenTelemetry.AutoInstrumentation.Diagnostics;
 using OpenTelemetry.AutoInstrumentation.Loading;
 using OpenTelemetry.AutoInstrumentation.Logging;
 using OpenTelemetry.AutoInstrumentation.Plugins;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -25,17 +27,25 @@ internal static class Instrumentation
     private static readonly IOtelLogger Logger = OtelLogging.GetLogger();
     private static readonly LazyInstrumentationLoader LazyInstrumentationLoader = new();
 
+    private static readonly Lazy<LoggerProvider?> LoggerProviderFactory = new(InitializeLoggerProvider, true);
+
     private static int _initialized;
     private static int _isExiting;
     private static SdkSelfDiagnosticsEventListener? _sdkEventListener;
 
     private static TracerProvider? _tracerProvider;
     private static MeterProvider? _meterProvider;
+
     private static PluginManager? _pluginManager;
 
-#if NET6_0_OR_GREATER
+#if NET
     private static ContinuousProfilerProcessor? _profilerProcessor;
 #endif
+
+    internal static LoggerProvider? LoggerProvider
+    {
+        get => LoggerProviderFactory.Value;
+    }
 
     internal static PluginManager? PluginManager => _pluginManager;
 
@@ -70,7 +80,7 @@ internal static class Instrumentation
         {
             // On .NET Framework only, initialize env vars from app.config/web.config
             // this does not override settings which where already set via env vars.
-            // We are doing so as the OTel .NET SDK only supports the env vars and we want to be
+            // We are doing so as the OTel .NET SDK only supports the env vars and we want to
             // be able to set them via app.config/web.config.
             EnvironmentInitializer.Initialize(System.Configuration.ConfigurationManager.AppSettings);
         }
@@ -89,17 +99,17 @@ internal static class Instrumentation
             _pluginManager = new PluginManager(GeneralSettings.Value);
             _pluginManager.Initializing();
 
-#if NET6_0_OR_GREATER
+#if NET
             var profilerEnabled = GeneralSettings.Value.ProfilerEnabled;
 
             if (profilerEnabled)
             {
-                var (threadSamplingEnabled, threadSamplingInterval, allocationSamplingEnabled, maxMemorySamplesPerMinute, exportInterval, continuousProfilerExporter) = _pluginManager.GetFirstContinuousConfiguration();
-                Logger.Debug($"Continuous profiling configuration: Thread sampling enabled: {threadSamplingEnabled}, thread sampling interval: {threadSamplingInterval}, allocation sampling enabled: {allocationSamplingEnabled}, max memory samples per minute: {maxMemorySamplesPerMinute}, export interval: {exportInterval}, continuous profiler exporter: {continuousProfilerExporter.GetType()}");
+                var (threadSamplingEnabled, threadSamplingInterval, allocationSamplingEnabled, maxMemorySamplesPerMinute, exportInterval, exportTimeout, continuousProfilerExporter) = _pluginManager.GetFirstContinuousConfiguration();
+                Logger.Debug($"Continuous profiling configuration: Thread sampling enabled: {threadSamplingEnabled}, thread sampling interval: {threadSamplingInterval}, allocation sampling enabled: {allocationSamplingEnabled}, max memory samples per minute: {maxMemorySamplesPerMinute}, export interval: {exportInterval}, export timeout: {exportTimeout}, continuous profiler exporter: {continuousProfilerExporter.GetType()}");
 
                 if (threadSamplingEnabled || allocationSamplingEnabled)
                 {
-                    InitializeContinuousProfiling(continuousProfilerExporter, threadSamplingEnabled, allocationSamplingEnabled, threadSamplingInterval, maxMemorySamplesPerMinute, exportInterval);
+                    InitializeContinuousProfiling(continuousProfilerExporter, threadSamplingEnabled, allocationSamplingEnabled, threadSamplingInterval, maxMemorySamplesPerMinute, exportInterval, exportTimeout);
                 }
             }
             else
@@ -217,8 +227,38 @@ internal static class Instrumentation
         }
     }
 
-#if NET6_0_OR_GREATER
-    private static void InitializeContinuousProfiling(object continuousProfilerExporter, bool threadSamplingEnabled, bool allocationSamplingEnabled, uint threadSamplingInterval, uint maxMemorySamplesPerMinute, TimeSpan exportInterval)
+    private static LoggerProvider? InitializeLoggerProvider()
+    {
+        // ILogger bridge is initialized using ILogger-specific extension methods in LoggerInitializer class.
+        // That extension methods sets up its own LogProvider.
+        if (LogSettings.Value.EnableLog4NetBridge && LogSettings.Value.LogsEnabled && LogSettings.Value.EnabledInstrumentations.Contains(LogInstrumentation.Log4Net))
+        {
+            // TODO: Replace reflection usage when Logs Api is made public in non-rc builds.
+            // Sdk.CreateLoggerProviderBuilder()
+            var createLoggerProviderBuilderMethod = typeof(Sdk).GetMethod("CreateLoggerProviderBuilder", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var loggerProviderBuilder = createLoggerProviderBuilderMethod.Invoke(null, null) as LoggerProviderBuilder;
+
+            // TODO: plugins support
+            var loggerProvider = loggerProviderBuilder!
+                .SetResourceBuilder(ResourceConfigurator.CreateResourceBuilder(GeneralSettings.Value.EnabledResourceDetectors))
+                .UseEnvironmentVariables(LazyInstrumentationLoader, LogSettings.Value, _pluginManager!)
+                .Build();
+            Logger.Information("OpenTelemetry logger provider initialized.");
+            return loggerProvider;
+        }
+
+        return null;
+    }
+
+#if NET
+    private static void InitializeContinuousProfiling(
+        object continuousProfilerExporter,
+        bool threadSamplingEnabled,
+        bool allocationSamplingEnabled,
+        uint threadSamplingInterval,
+        uint maxMemorySamplesPerMinute,
+        TimeSpan exportInterval,
+        TimeSpan exportTimeout)
     {
         var continuousProfilerExporterType = continuousProfilerExporter.GetType();
         var exportThreadSamplesMethod = continuousProfilerExporterType.GetMethod("ExportThreadSamples");
@@ -237,11 +277,11 @@ internal static class Instrumentation
         }
 
         NativeMethods.ConfigureNativeContinuousProfiler(threadSamplingEnabled, threadSamplingInterval, allocationSamplingEnabled, maxMemorySamplesPerMinute);
-        var threadSamplesMethod = exportThreadSamplesMethod.CreateDelegate<Action<byte[], int>>(continuousProfilerExporter);
-        var allocationSamplesMethod = exportAllocationSamplesMethod.CreateDelegate<Action<byte[], int>>(continuousProfilerExporter);
+        var threadSamplesMethod = exportThreadSamplesMethod.CreateDelegate<Action<byte[], int, CancellationToken>>(continuousProfilerExporter);
+        var allocationSamplesMethod = exportAllocationSamplesMethod.CreateDelegate<Action<byte[], int, CancellationToken>>(continuousProfilerExporter);
 
-        var bufferProcessor = new BufferProcessor(threadSamplingEnabled, allocationSamplingEnabled, threadSamplesMethod, allocationSamplesMethod);
-        _profilerProcessor = new ContinuousProfilerProcessor(bufferProcessor, exportInterval);
+        var bufferProcessor = new BufferProcessor(threadSamplingEnabled, allocationSamplingEnabled, threadSamplesMethod, allocationSamplesMethod, exportTimeout);
+        _profilerProcessor = new ContinuousProfilerProcessor(bufferProcessor, exportInterval, exportTimeout);
         Activity.CurrentChanged += _profilerProcessor.Activity_CurrentChanged;
     }
 #endif
@@ -276,9 +316,8 @@ internal static class Instrumentation
                     DelayedInitialization.Metrics.AddAspNet(lazyInstrumentationLoader, pluginManager);
                     break;
 #endif
-#if NET6_0_OR_GREATER
+#if NET
                 case MetricInstrumentation.AspNetCore:
-                    DelayedInitialization.Metrics.AddAspNetCore(lazyInstrumentationLoader);
                     break;
 #endif
                 case MetricInstrumentation.HttpClient:
@@ -289,6 +328,9 @@ internal static class Instrumentation
                 case MetricInstrumentation.Process:
                     break;
                 case MetricInstrumentation.NServiceBus:
+                    break;
+                case MetricInstrumentation.SqlClient:
+                    DelayedInitialization.Metrics.AddSqlClient(lazyInstrumentationLoader, pluginManager);
                     break;
                 default:
                     Logger.Warning($"Configured metric instrumentation type is not supported: {instrumentation}");
@@ -304,27 +346,22 @@ internal static class Instrumentation
 
     private static void AddLazilyLoadedTraceInstrumentations(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
     {
-        // ensure WcfInitializer is added only once,
-        // it is needed when either WcfClient or WcfService instrumentations are enabled
-        // to initialize WcfInstrumentationOptions
-        var wcfInstrumentationAdded = false;
         foreach (var instrumentation in tracerSettings.EnabledInstrumentations)
         {
             switch (instrumentation)
             {
 #if NETFRAMEWORK
                 case TracerInstrumentation.AspNet:
-                    DelayedInitialization.Traces.AddAspNet(lazyInstrumentationLoader, pluginManager);
+                    DelayedInitialization.Traces.AddAspNet(lazyInstrumentationLoader, pluginManager, tracerSettings);
                     break;
                 case TracerInstrumentation.WcfService:
-                    AddWcfIfNeeded(lazyInstrumentationLoader, pluginManager, ref wcfInstrumentationAdded);
                     break;
 #endif
                 case TracerInstrumentation.HttpClient:
-                    DelayedInitialization.Traces.AddHttpClient(lazyInstrumentationLoader, pluginManager);
+                    DelayedInitialization.Traces.AddHttpClient(lazyInstrumentationLoader, pluginManager, tracerSettings);
                     break;
                 case TracerInstrumentation.GrpcNetClient:
-                    DelayedInitialization.Traces.AddGrpcClient(lazyInstrumentationLoader, pluginManager);
+                    DelayedInitialization.Traces.AddGrpcClient(lazyInstrumentationLoader, pluginManager, tracerSettings);
                     break;
                 case TracerInstrumentation.SqlClient:
                     DelayedInitialization.Traces.AddSqlClient(lazyInstrumentationLoader, pluginManager, tracerSettings);
@@ -333,11 +370,10 @@ internal static class Instrumentation
                     DelayedInitialization.Traces.AddQuartz(lazyInstrumentationLoader, pluginManager);
                     break;
                 case TracerInstrumentation.WcfClient:
-                    AddWcfIfNeeded(lazyInstrumentationLoader, pluginManager, ref wcfInstrumentationAdded);
                     break;
-#if NET6_0_OR_GREATER
+#if NET
                 case TracerInstrumentation.AspNetCore:
-                    DelayedInitialization.Traces.AddAspNetCore(lazyInstrumentationLoader, pluginManager);
+                    DelayedInitialization.Traces.AddAspNetCore(lazyInstrumentationLoader, pluginManager, tracerSettings);
                     break;
                 case TracerInstrumentation.MySqlData:
                     break;
@@ -368,6 +404,10 @@ internal static class Instrumentation
                     break;
                 case TracerInstrumentation.Kafka:
                     break;
+                case TracerInstrumentation.OracleMda:
+                    break;
+                case TracerInstrumentation.RabbitMq:
+                    break;
                 default:
                     Logger.Warning($"Configured trace instrumentation type is not supported: {instrumentation}");
                     if (FailFastSettings.Value.FailFast)
@@ -380,20 +420,6 @@ internal static class Instrumentation
         }
     }
 
-    private static void AddWcfIfNeeded(
-        LazyInstrumentationLoader lazyInstrumentationLoader,
-        PluginManager pluginManager,
-        ref bool wcfInstrumentationAdded)
-    {
-        if (wcfInstrumentationAdded)
-        {
-            return;
-        }
-
-        DelayedInitialization.Traces.AddWcf(lazyInstrumentationLoader, pluginManager);
-        wcfInstrumentationAdded = true;
-    }
-
     private static void OnExit(object? sender, EventArgs e)
     {
         if (Interlocked.Exchange(ref _isExiting, value: 1) != 0)
@@ -404,7 +430,7 @@ internal static class Instrumentation
 
         try
         {
-#if NET6_0_OR_GREATER
+#if NET
             LazyInstrumentationLoader?.Dispose();
             if (_profilerProcessor != null)
             {
@@ -415,6 +441,11 @@ internal static class Instrumentation
 #endif
             _tracerProvider?.Dispose();
             _meterProvider?.Dispose();
+            if (LoggerProviderFactory.IsValueCreated)
+            {
+                LoggerProvider?.Dispose();
+            }
+
             _sdkEventListener?.Dispose();
 
             Logger.Information("OpenTelemetry Automatic Instrumentation exit.");

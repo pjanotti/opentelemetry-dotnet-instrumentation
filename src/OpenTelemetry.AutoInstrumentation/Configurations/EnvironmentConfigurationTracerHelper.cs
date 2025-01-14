@@ -16,32 +16,32 @@ internal static class EnvironmentConfigurationTracerHelper
         TracerSettings settings,
         PluginManager pluginManager)
     {
-        // ensure WcfInitializer is added only once,
+        // ensure WCF instrumentation activity source is added only once,
         // it is needed when either WcfClient or WcfService instrumentations are enabled
-        // to initialize WcfInstrumentationOptions
         var wcfInstrumentationAdded = false;
         foreach (var enabledInstrumentation in settings.EnabledInstrumentations)
         {
             _ = enabledInstrumentation switch
             {
 #if NETFRAMEWORK
-                TracerInstrumentation.AspNet => Wrappers.AddAspNetInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
-                TracerInstrumentation.WcfService => AddWcfIfNeeded(builder, pluginManager, lazyInstrumentationLoader, ref wcfInstrumentationAdded),
+                TracerInstrumentation.AspNet => Wrappers.AddAspNetInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
+                TracerInstrumentation.WcfService => AddWcfIfNeeded(builder, ref wcfInstrumentationAdded),
 #endif
-                TracerInstrumentation.GrpcNetClient => Wrappers.AddGrpcClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
-                TracerInstrumentation.HttpClient => Wrappers.AddHttpClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
+                TracerInstrumentation.GrpcNetClient => Wrappers.AddGrpcClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
+                TracerInstrumentation.HttpClient => Wrappers.AddHttpClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
                 TracerInstrumentation.Npgsql => builder.AddSource("Npgsql"),
                 TracerInstrumentation.SqlClient => Wrappers.AddSqlClientInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
                 TracerInstrumentation.NServiceBus => builder.AddSource("NServiceBus.Core"),
                 TracerInstrumentation.Elasticsearch => builder.AddSource("Elastic.Clients.Elasticsearch.ElasticsearchClient"),
                 TracerInstrumentation.ElasticTransport => builder.AddSource("Elastic.Transport"),
                 TracerInstrumentation.Quartz => Wrappers.AddQuartzInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
-                TracerInstrumentation.MongoDB => builder.AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources"),
                 TracerInstrumentation.MySqlConnector => builder.AddSource("MySqlConnector"),
                 TracerInstrumentation.Azure => Wrappers.AddAzureInstrumentation(builder),
-                TracerInstrumentation.WcfClient => AddWcfIfNeeded(builder, pluginManager, lazyInstrumentationLoader, ref wcfInstrumentationAdded),
-#if NET6_0_OR_GREATER
-                TracerInstrumentation.AspNetCore => Wrappers.AddAspNetCoreInstrumentation(builder, pluginManager, lazyInstrumentationLoader),
+                TracerInstrumentation.WcfClient => AddWcfIfNeeded(builder, ref wcfInstrumentationAdded),
+                TracerInstrumentation.OracleMda => Wrappers.AddOracleMdaInstrumentation(builder, lazyInstrumentationLoader, settings),
+                TracerInstrumentation.RabbitMq => builder.AddSource("RabbitMQ.Client.Publisher").AddSource("RabbitMQ.Client.Subscriber"),
+#if NET
+                TracerInstrumentation.AspNetCore => Wrappers.AddAspNetCoreInstrumentation(builder, pluginManager, lazyInstrumentationLoader, settings),
                 TracerInstrumentation.MassTransit => builder.AddSource("MassTransit"),
                 TracerInstrumentation.MySqlData => builder.AddSource("connector-net"),
                 TracerInstrumentation.StackExchangeRedis => builder.AddSource("OpenTelemetry.Instrumentation.StackExchangeRedis"),
@@ -58,7 +58,6 @@ internal static class EnvironmentConfigurationTracerHelper
         }
 
         builder
-            .SetSampler(settings)
             // Exporters can cause dependency loads.
             // Should be called later if dependency listeners are already setup.
             .SetExporter(settings, pluginManager)
@@ -74,8 +73,6 @@ internal static class EnvironmentConfigurationTracerHelper
 
     private static TracerProviderBuilder AddWcfIfNeeded(
         TracerProviderBuilder tracerProviderBuilder,
-        PluginManager pluginManager,
-        LazyInstrumentationLoader lazyInstrumentationLoader,
         ref bool wcfInstrumentationAdded)
     {
         if (wcfInstrumentationAdded)
@@ -83,43 +80,26 @@ internal static class EnvironmentConfigurationTracerHelper
             return tracerProviderBuilder;
         }
 
-        Wrappers.AddWcfInstrumentation(tracerProviderBuilder, pluginManager, lazyInstrumentationLoader);
+        tracerProviderBuilder.AddSource("OpenTelemetry.Instrumentation.Wcf");
         wcfInstrumentationAdded = true;
 
         return tracerProviderBuilder;
     }
 
-    private static TracerProviderBuilder SetSampler(this TracerProviderBuilder builder, TracerSettings settings)
-    {
-        if (settings.TracesSampler == null)
-        {
-            return builder;
-        }
-
-        var sampler = TracerSamplerHelper.GetSampler(settings.TracesSampler, settings.TracesSamplerArguments);
-
-        if (sampler == null)
-        {
-            return builder;
-        }
-
-        return builder.SetSampler(sampler);
-    }
-
     private static TracerProviderBuilder SetExporter(this TracerProviderBuilder builder, TracerSettings settings, PluginManager pluginManager)
     {
-        if (settings.ConsoleExporterEnabled)
+        foreach (var traceExporter in settings.TracesExporters)
         {
-            Wrappers.AddConsoleExporter(builder, pluginManager);
+            builder = traceExporter switch
+            {
+                TracesExporter.Zipkin => Wrappers.AddZipkinExporter(builder, pluginManager),
+                TracesExporter.Otlp => Wrappers.AddOtlpExporter(builder, settings, pluginManager),
+                TracesExporter.Console => Wrappers.AddConsoleExporter(builder, pluginManager),
+                _ => throw new ArgumentOutOfRangeException($"Traces exporter '{traceExporter}' is incorrect")
+            };
         }
 
-        return settings.TracesExporter switch
-        {
-            TracesExporter.Zipkin => Wrappers.AddZipkinExporter(builder, pluginManager),
-            TracesExporter.Otlp => Wrappers.AddOtlpExporter(builder, settings, pluginManager),
-            TracesExporter.None => builder,
-            _ => throw new ArgumentOutOfRangeException($"Traces exporter '{settings.TracesExporter}' is incorrect")
-        };
+        return builder;
     }
 
     /// <summary>
@@ -131,17 +111,9 @@ internal static class EnvironmentConfigurationTracerHelper
         // Instrumentations
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddWcfInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddHttpClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
-            DelayedInitialization.Traces.AddWcf(lazyInstrumentationLoader, pluginManager);
-
-            return builder.AddSource("OpenTelemetry.Instrumentation.Wcf");
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddHttpClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
-        {
-            DelayedInitialization.Traces.AddHttpClient(lazyInstrumentationLoader, pluginManager);
+            DelayedInitialization.Traces.AddHttpClient(lazyInstrumentationLoader, pluginManager, tracerSettings);
 
 #if NETFRAMEWORK
             builder.AddSource("OpenTelemetry.Instrumentation.Http.HttpWebRequest");
@@ -156,26 +128,18 @@ internal static class EnvironmentConfigurationTracerHelper
 
 #if NETFRAMEWORK
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddAspNetInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddAspNetInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
-            DelayedInitialization.Traces.AddAspNet(lazyInstrumentationLoader, pluginManager);
+            DelayedInitialization.Traces.AddAspNet(lazyInstrumentationLoader, pluginManager, tracerSettings);
             return builder.AddSource(OpenTelemetry.Instrumentation.AspNet.TelemetryHttpModule.AspNetSourceName);
         }
 #endif
 
-#if NET6_0_OR_GREATER
+#if NET
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddAspNetCoreInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddAspNetCoreInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
-            DelayedInitialization.Traces.AddAspNetCore(lazyInstrumentationLoader, pluginManager);
-
-            if (Environment.Version.Major == 6)
-            {
-                return builder
-                    .AddSource("OpenTelemetry.Instrumentation.AspNetCore")
-                    .AddLegacySource("Microsoft.AspNetCore.Hosting.HttpRequestIn");
-            }
-
+            DelayedInitialization.Traces.AddAspNetCore(lazyInstrumentationLoader, pluginManager, tracerSettings);
             return builder.AddSource("Microsoft.AspNetCore");
         }
 
@@ -203,9 +167,21 @@ internal static class EnvironmentConfigurationTracerHelper
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static TracerProviderBuilder AddGrpcClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader)
+        public static TracerProviderBuilder AddOracleMdaInstrumentation(TracerProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
-            DelayedInitialization.Traces.AddGrpcClient(lazyInstrumentationLoader, pluginManager);
+            DelayedInitialization.Traces.AddOracleMda(lazyInstrumentationLoader, tracerSettings);
+
+#if NETFRAMEWORK
+            return builder.AddSource("Oracle.ManagedDataAccess");
+#else
+            return builder.AddSource("Oracle.ManagedDataAccess.Core");
+#endif
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static TracerProviderBuilder AddGrpcClientInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
+        {
+            DelayedInitialization.Traces.AddGrpcClient(lazyInstrumentationLoader, pluginManager, tracerSettings);
 
             builder.AddSource("OpenTelemetry.Instrumentation.GrpcNetClient");
             builder.AddLegacySource("Grpc.Net.Client.GrpcOut");
@@ -223,7 +199,7 @@ internal static class EnvironmentConfigurationTracerHelper
                 .AddLegacySource("Quartz.Job.Veto");
         }
 
-#if NET6_0_OR_GREATER
+#if NET
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static TracerProviderBuilder AddEntityFrameworkCoreInstrumentation(TracerProviderBuilder builder, PluginManager pluginManager, LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
         {
@@ -252,10 +228,8 @@ internal static class EnvironmentConfigurationTracerHelper
         {
             return builder.AddOtlpExporter(options =>
             {
-                if (settings.OtlpExportProtocol.HasValue)
-                {
-                    options.Protocol = settings.OtlpExportProtocol.Value;
-                }
+                // Copy Auto settings to SDK settings
+                settings.OtlpSettings?.CopyTo(options);
 
                 pluginManager.ConfigureTracesOptions(options);
             });

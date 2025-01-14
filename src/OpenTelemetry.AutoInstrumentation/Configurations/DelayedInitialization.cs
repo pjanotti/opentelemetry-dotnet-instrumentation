@@ -14,39 +14,39 @@ internal static class DelayedInitialization
     {
 #if NETFRAMEWORK
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddAspNet(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddAspNet(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            new AspNetInitializer(lazyInstrumentationLoader, pluginManager);
+            new AspNetInitializer(lazyInstrumentationLoader, pluginManager, tracerSettings);
         }
 #endif
 
-#if NET6_0_OR_GREATER
+#if NET
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddAspNetCore(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddAspNetCore(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            lazyInstrumentationLoader.Add(new AspNetCoreInitializer(pluginManager));
+            lazyInstrumentationLoader.Add(new AspNetCoreInitializer(pluginManager, tracerSettings));
         }
 #endif
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddHttpClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddHttpClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            new HttpClientInitializer(lazyInstrumentationLoader, pluginManager);
+            new HttpClientInitializer(lazyInstrumentationLoader, pluginManager, tracerSettings);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddGrpcClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        public static void AddGrpcClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            lazyInstrumentationLoader.Add(new GrpcClientInitializer(pluginManager));
+            lazyInstrumentationLoader.Add(new GrpcClientInitializer(pluginManager, tracerSettings));
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void AddSqlClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
         {
-            new SqlClientInitializer(lazyInstrumentationLoader, pluginManager, tracerSettings);
+            new SqlClientTracerInitializer(lazyInstrumentationLoader, pluginManager, tracerSettings);
         }
 
-#if NET6_0_OR_GREATER
+#if NET
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void AddEntityFrameworkCore(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager, TracerSettings tracerSettings)
@@ -62,15 +62,15 @@ internal static class DelayedInitialization
 #endif
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddWcf(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
-        {
-            lazyInstrumentationLoader.Add(new WcfInitializer(pluginManager));
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
         public static void AddQuartz(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
         {
             lazyInstrumentationLoader.Add(new QuartzInitializer(pluginManager));
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void AddOracleMda(LazyInstrumentationLoader lazyInstrumentationLoader, TracerSettings tracerSettings)
+        {
+            lazyInstrumentationLoader.Add(new OracleMdaInitializer(tracerSettings));
         }
     }
 
@@ -84,18 +84,16 @@ internal static class DelayedInitialization
         }
 #endif
 
-#if NET6_0_OR_GREATER
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void AddAspNetCore(LazyInstrumentationLoader lazyInstrumentationLoader)
-        {
-            lazyInstrumentationLoader.Add(new AspNetCoreMetricsInitializer());
-        }
-#endif
-
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void AddHttpClient(LazyInstrumentationLoader lazyInstrumentationLoader)
         {
             new HttpClientMetricsInitializer(lazyInstrumentationLoader);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void AddSqlClient(LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        {
+            new SqlClientMetricsInitializer(lazyInstrumentationLoader, pluginManager);
         }
     }
 }

@@ -1,8 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
 using Nuke.Common.IO;
-using Nuke.Common.Utilities.Collections;
-using static Nuke.Common.IO.FileSystemTasks;
 
 namespace Extensions;
 
@@ -13,9 +11,8 @@ internal static class DepsJsonExtensions
         var runtimeName = depsJson["runtimeTarget"]["name"].GetValue<string>();
         var folderRuntimeName = runtimeName switch
         {
-            ".NETCoreApp,Version=v6.0" => "net6.0",
-            ".NETCoreApp,Version=v7.0" => "net7.0",
             ".NETCoreApp,Version=v8.0" => "net8.0",
+            ".NETCoreApp,Version=v9.0" => "net9.0",
             _ => throw new ArgumentOutOfRangeException(nameof(runtimeName), runtimeName,
                 "This value is not supported. You have probably introduced new .NET version to AutoInstrumentation")
         };
@@ -90,7 +87,7 @@ internal static class DepsJsonExtensions
                     var newKey = libKey.Replace($"lib/{runtime}", $"lib/{rollForwardRuntime}");
 
                     runtimeObject.Remove(libKey);
-                    runtimeObject.AddPair(newKey, libNode);
+                    runtimeObject.Add(newKey, libNode);
                 }
             }
         }
@@ -114,7 +111,7 @@ internal static class DepsJsonExtensions
                 {
                     var destDir = assemblyVersionDirectory / "lib" / rollForwardRuntime;
 
-                    CopyDirectoryRecursively(sourceDir, destDir);
+                    sourceDir.Copy(destDir);
 
                     // Since the json was also rolled forward the original tfm folder can be deleted.
                     sourceDir.DeleteDirectory();
@@ -125,7 +122,7 @@ internal static class DepsJsonExtensions
 
     public static void RemoveDuplicatedLibraries(this JsonObject depsJson, ReadOnlyCollection<AbsolutePath> architectureStores)
     {
-        var duplicatedLibraries = new List<(string Name, string Version)>();
+        var duplicatedLibraries = new List<(string Name, string Version)>(0);
 
         foreach (var duplicatedLibrary in duplicatedLibraries)
         {

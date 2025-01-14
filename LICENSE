@@ -251,6 +251,7 @@ Libraries
 - OpenTelemetry.ResourceDetectors.Azure.dll,
 - OpenTelemetry.ResourceDetectors.Container.dll,
 - OpenTelemetry.ResourceDetectors.Host.dll,
+- OpenTelemetry.ResourceDetectors.OperatingSystem.dll,
 - OpenTelemetry.ResourceDetectors.Process.dll,
 - OpenTelemetry.ResourceDetectors.ProcessRuntime.dll,
 are under the following copyright:
@@ -268,13 +269,15 @@ Libraries
 - Microsoft.Extensions.Configuration.Binder,
 - Microsoft.Extensions.DependencyInjection,
 - Microsoft.Extensions.DependencyInjection.Abstractions,
+- Microsoft.Extensions.Diagnostics.Abstractions,
 - Microsoft.Extensions.Logging,
 - Microsoft.Extensions.Logging.Abstractions,
 - Microsoft.Extensions.Logging.Configuration,
 - Microsoft.Extensions.Options,
 - Microsoft.Extensions.Options.ConfigurationExtensions,
-- Microsoft.Extensions.Primitives
+- Microsoft.Extensions.Primitives,
 - System.Diagnostics.DiagnosticSource,
+- System.IO.Pipelines,
 - System.Security.Permissions,
 are under the following copyright:
 Copyright (c) .NET Foundation and Contributors under the MIT License (MIT)
@@ -288,11 +291,6 @@ Libraries
 are under the following copyright:
 Copyright (c) .NET Foundation and Contributors under the MIT License (MIT)
 (<https://github.com/dotnet/wcf/blob/main/LICENSE.TXT>).
-
-Library MongoDB.Driver.Core.Extensions.DiagnosticSources is under the following copyright:
-Copyright MongoDB.Driver.Core.Extensions.DiagnosticSources Authors under Apache
-License Version 2.0
-(<https://github.com/jbogard/MongoDB.Driver.Core.Extensions.DiagnosticSources/blob/master/LICENSE>).
 
 Component Serilog compiled into OpenTelemetry.AutoInstrumentation, OpenTelemetry.AutoInstrumentation.Loader, OpenTelemetry.AutoInstrumentation.StartupHook
 is under the following copyright:

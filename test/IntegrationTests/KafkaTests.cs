@@ -31,7 +31,6 @@ public class KafkaTests : TestHelper
 
     // https://github.com/confluentinc/confluent-kafka-dotnet/blob/07de95ed647af80a0db39ce6a8891a630423b952/src/Confluent.Kafka/Offset.cs#L36C44-L36C44
     private const int InvalidOffset = -1001;
-    private const string TestApplicationInstrumentationScopeName = "TestApplication.Kafka";
 
     public KafkaTests(ITestOutputHelper testOutputHelper)
         : base("Kafka", testOutputHelper)
@@ -41,7 +40,7 @@ public class KafkaTests : TestHelper
     [Theory]
     [Trait("Category", "EndToEnd")]
     [Trait("Containers", "Linux")]
-    [MemberData(nameof(LibraryVersion.Kafka), MemberType = typeof(LibraryVersion))]
+    [MemberData(nameof(LibraryVersion.GetPlatformVersions), nameof(LibraryVersion.Kafka), MemberType = typeof(LibraryVersion))]
     public void SubmitsTraces(string packageVersion)
     {
         var topicName = $"test-topic-{packageVersion}";
@@ -49,23 +48,18 @@ public class KafkaTests : TestHelper
         using var collector = new MockSpansCollector(Output);
         SetExporter(collector);
 
-        collector.Expect(TestApplicationInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Internal);
-
         // Failed produce attempts made before topic is created.
         collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Producer && ValidateResultProcessingProduceExceptionSpan(span, topicName), "Failed Produce attempt with delivery handler set.");
         collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Producer && ValidateProduceExceptionSpan(span, topicName), "Failed Produce attempt without delivery handler set.");
         collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Producer && ValidateResultProcessingProduceExceptionSpan(span, topicName), "Failed ProduceAsync attempt.");
 
-        if (packageVersion == string.Empty || Version.Parse(packageVersion) >= new Version(2, 3, 0))
+        if (packageVersion == string.Empty || Version.Parse(packageVersion) != new Version(1, 4, 0))
         {
             // Failed consume attempt.
-            collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Consumer && ValidateConsumeExceptionSpan(span, topicName), "Failed Consume attempt.");
-        }
-        else
-        {
-            // For 1.4.0 null is returned when attempting to read from non-existent topic,
-            // and no exception is thrown.
-            collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Consumer && ValidateEmptyReadConsumerSpan(span, topicName), "Successful Consume attempt that returned no message.");
+            collector.Expect(
+                KafkaInstrumentationScopeName,
+                span => span.Kind == Span.Types.SpanKind.Consumer && ValidateConsumeExceptionSpan(span, topicName),
+                "Failed Consume attempt.");
         }
 
         // Successful produce attempts after topic was created with admin client.
@@ -81,29 +75,39 @@ public class KafkaTests : TestHelper
         collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Consumer && ValidateConsumerSpan(span, topicName, 1), "Second successful Consume attempt.");
         collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Consumer && ValidateConsumerSpan(span, topicName, 2), "Third successful Consume attempt.");
 
-        // Consume attempt that returns no message.
-        collector.Expect(KafkaInstrumentationScopeName, span => span.Kind == Span.Types.SpanKind.Consumer && ValidateEmptyReadConsumerSpan(span, topicName), "Additional successful attempt after all the produced messages were already read.");
-
         collector.ExpectCollected(collection => ValidatePropagation(collection, topicName));
+        EnableBytecodeInstrumentation();
+
+        RunTestApplication(new TestSettings
+        {
+            PackageVersion = packageVersion,
+            Arguments = $"--topic-name {topicName}"
+        });
+
+        collector.AssertExpectations();
+    }
+
+    [Theory]
+    [Trait("Category", "EndToEnd")]
+    [Trait("Containers", "Linux")]
+    [MemberData(nameof(LibraryVersion.GetPlatformVersions), nameof(LibraryVersion.Kafka), MemberType = typeof(LibraryVersion))]
+    // ReSharper disable once InconsistentNaming
+    public void NoSpansForPartitionEOF(string packageVersion)
+    {
+        var topicName = $"test-topic2-{packageVersion}";
+
+        using var collector = new MockSpansCollector(Output);
+        SetExporter(collector);
 
         EnableBytecodeInstrumentation();
 
         RunTestApplication(new TestSettings
         {
             PackageVersion = packageVersion,
-            Arguments = topicName
+            Arguments = $"--topic-name {topicName} --consume-only"
         });
 
-        collector.AssertExpectations();
-    }
-
-    private static bool ValidateEmptyReadConsumerSpan(Span span, string topicName)
-    {
-        var consumerGroupId = span.Attributes.Single(kv => kv.Key == KafkaConsumerGroupAttributeName).Value.StringValue;
-        return span.Name == MessagingReceiveOperationAttributeValue &&
-               span.Links.Count == 0 &&
-               ValidateBasicSpanAttributes(span.Attributes, KafkaConsumerClientIdAttributeValue, MessagingReceiveOperationAttributeValue) &&
-               consumerGroupId == GetConsumerGroupIdAttributeValue(topicName);
+        collector.AssertEmpty(TimeSpan.FromSeconds(10));
     }
 
     private static string GetConsumerGroupIdAttributeValue(string topicName)
@@ -188,38 +192,16 @@ public class KafkaTests : TestHelper
                 !span.Span.Attributes.Single(attr => attr.Key == KafkaMessageTombstoneAttributeName).Value.BoolValue &&
                 span.Span.Status is null);
 
-        var consumerSpansWithLinks = producerSpans
-            .Select(producerSpan =>
+        return producerSpans.Select(
+            producerSpan =>
                 GetMatchingConsumerSpan(collectedSpans, producerSpan.Span, expectedReceiveOperationName))
-            .ToList();
-
-        var manuallyCreatedSpan = collectedSpans.Single(collectedSpan =>
-            collectedSpan.InstrumentationScopeName == TestApplicationInstrumentationScopeName);
-
-        var consumerSpanWithCustomParent = consumerSpansWithLinks.SingleOrDefault(
-            span =>
-                span.Span.TraceId == manuallyCreatedSpan.Span.TraceId &&
-                span.Span.ParentSpanId == manuallyCreatedSpan.Span.SpanId);
-
-        var consumerSpansHaveCreationContextAsParent =
-            consumerSpansWithLinks
-                .Except(new[] { consumerSpanWithCustomParent })
-                .All(consumerSpan =>
-                    ValidateCreationContextAsParent(consumerSpan));
-
-        return consumerSpanWithCustomParent is not null && consumerSpansHaveCreationContextAsParent;
+            .All(consumerSpan => consumerSpan is not null);
     }
 
-    private static bool ValidateCreationContextAsParent(MockSpansCollector.Collected? consumerSpan)
-    {
-        return consumerSpan?.Span.TraceId == consumerSpan?.Span.Links[0].TraceId &&
-               consumerSpan?.Span.ParentSpanId == consumerSpan?.Span.Links[0].SpanId;
-    }
-
-    private static MockSpansCollector.Collected GetMatchingConsumerSpan(ICollection<MockSpansCollector.Collected> collectedSpans, Span producerSpan, string expectedReceiveOperationName)
+    private static MockSpansCollector.Collected? GetMatchingConsumerSpan(ICollection<MockSpansCollector.Collected> collectedSpans, Span producerSpan, string expectedReceiveOperationName)
     {
         return collectedSpans
-            .Single(span =>
+            .SingleOrDefault(span =>
             {
                 var parentLinksCount = span.Span.Links.Count(
                     link =>

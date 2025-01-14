@@ -25,7 +25,7 @@ internal enum TracerInstrumentation
     /// </summary>
     SqlClient = 2,
 
-#if NET6_0_OR_GREATER
+#if NET
     /// <summary>
     /// GraphQL instrumentation.
     /// </summary>
@@ -42,7 +42,7 @@ internal enum TracerInstrumentation
     /// </summary>
     Npgsql = 5,
 
-#if NET6_0_OR_GREATER
+#if NET
     /// <summary>
     /// MySqlData instrumentation.
     /// </summary>
@@ -65,7 +65,7 @@ internal enum TracerInstrumentation
     WcfService = 9,
 #endif
 
-#if NET6_0_OR_GREATER
+#if NET
     /// <summary>
     /// MassTransit instrumentation.
     /// </summary>
@@ -87,7 +87,7 @@ internal enum TracerInstrumentation
     /// </summary>
     Quartz = 13,
 
-#if NET6_0_OR_GREATER
+#if NET
     /// <summary>
     /// Entity Framework Core instrumentation.
     /// </summary>
@@ -122,5 +122,15 @@ internal enum TracerInstrumentation
     /// <summary>
     /// Kafka client instrumentation
     /// </summary>
-    Kafka = 20
+    Kafka = 20,
+
+    /// <summary>
+    /// Oracle Managed Data Access (Core) instrumentation
+    /// </summary>
+    OracleMda = 21,
+
+    /// <summary>
+    /// RabbitMQ client instrumentation
+    /// </summary>
+    RabbitMq = 22
 }

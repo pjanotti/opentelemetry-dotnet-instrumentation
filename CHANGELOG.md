@@ -5,7 +5,343 @@ All notable changes to this component are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This component adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/compare/v1.4.0..HEAD)
+## [Unreleased](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/compare/v1.10.0-beta.1..HEAD)
+
+### Added
+
+### Changed
+
+#### Dependency updates
+
+- .NET Framework only, following packages updated
+  - `Google.Protobuf` updated from `3.29.1` to `3.29.3`.
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+## [1.10.0-beta.1](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.10.0-beta.1)
+
+### Added
+
+- Support for .NET9.
+- Support for [RabbitMQ.Client](https://www.nuget.org/packages/RabbitMQ.Client/)
+  traces instrumentation for versions `7.0.0`+.
+- [log4net](https://www.nuget.org/packages/log4net/) [OpenTelemetry appender](https://opentelemetry.io/docs/concepts/signals/logs/#log-appender--bridge)
+  for versions >= `2.0.13` && < `4.0.0`
+- Support for SqlClient metrics.
+
+### Changed
+
+- Kafka and RabbitMQ 6 tags `otel.status_code` and `otel.status_description` are
+  replaced by native fields `Status` and `StatusDescription`.
+- Changed minimal supported version of `Microsoft.Extensions.Logging`
+  for `ILOGGER` instrumentation from `8.0.0` to `9.0.0`.
+- Glibc native libraries are compiled on Ubuntu v16.04.
+- Changed `MongoDB` traces instrumentation to the bytecode version. It supports
+  `MongoDB.Driver.Core` from `2.7.0` and `MongoDB.Driver` from `3.0.0`.
+
+#### Dependency updates
+
+- Updated [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.10.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.10.0).
+- Following packages updated
+  - `Microsoft.Extensions.Configuration.Binder` from `8.0.2` to `9.0.0`,
+  - `Microsoft.Extensions.Logging.Configuration` from `8.0.0` to `9.0.0`,
+  - `OpenTelemetry.Exporter.Prometheus.HttpListener` from `1.9.0-beta.2` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.GrpcNetClient` from `1.9.0-beta.1` to `1.10.0-beta.1`
+  - `OpenTelemetry.Instrumentation.Http` from `1.9.0` to `1.10.0`,
+  - `OpenTelemetry.Instrumentation.Process` from `0.5.0-beta.7` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.Quartz` from `1.0.0-beta.3` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.Runtime` from `1.9.0` to `1.10.0`,
+  - `OpenTelemetry.Instrumentation.SqlClient` from `1.9.0-beta.1` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.Wcf` from `1.0.0-rc.18` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Resources.Azure` from `1.0.0-beta.9` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Resources.Container` from `1.0.0-beta.9` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Resources.Host` from `0.1.0-beta.3` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Resources.OperatingSystem` from `0.1.0-alpha.4` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Resources.Process` from `0.1.0-beta.3` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Resources.ProcessRuntime` from `0.1.0-beta.2` to `1.10.0-beta.1`.
+- .NET only, following packages updated
+  - `OpenTelemetry.Instrumentation.AspNetCore` from `1.9.0` to `1.10.1`,
+  - `OpenTelemetry.Instrumentation.EntityFrameworkCore` from `1.0.0-beta.12` to `1.10.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.StackExchangeRedis` from `1.9.0-beta.1` to `1.10.0-beta.1`,
+  - `System.Diagnostics.DiagnosticSource` from `8.0.0` to `9.0.0`.
+- .NET Framework only, following packages updated
+  - `Google.Protobuf` updated from `3.28.3` to `3.29.1`,
+  - `Microsoft.Bcl.AsyncInterfaces` from `8.0.0` to `9.0.0`,
+  - `Microsoft.Extensions.Configuration` from `9.0.0` to `9.0.0`,
+  - `Microsoft.Extensions.Configuration.Abstractions` from `8.0.0` to `9.0.0`,
+  - `Microsoft.Extensions.DependencyInjection` from `8.0.1` to `9.0.0`,
+  - `Microsoft.Extensions.DependencyInjection.Abstractions` from `8.0.2` to `9.0.0`,
+  - `Microsoft.Extensions.Logging` from `8.0.0` to `9.0.0`,
+  - `Microsoft.Extensions.Logging.Abstractions` from `8.0.1` to `9.0.0`,
+  - `Microsoft.Extensions.Options` from `8.0.2` to `9.0.0`,
+  - `Microsoft.Extensions.Options.ConfigurationExtensions` from `8.0.0` to `9.0.0`,
+  - `Microsoft.Extensions.Primitives` from `8.0.0` to `9.0.0`,
+  - `OpenTelemetry.Instrumentation.AspNet` from `1.9.0-beta.1` to `1.10.0-beta.1`,
+  - `System.Buffers` from `4.5.5` to `4.6.0`,
+  - `System.Memory` from `4.5.5` to `4.6.0`,
+  - `System.Numerics.Vectors` from `4.5.0` to `4.6.0`,
+  - `System.Diagnostics.DiagnosticSource` from `8.0.1` to `9.0.0`,
+  - `System.Runtime.CompilerServices.Unsafe` from `6.0.0` to `6.1.0`,
+  - `System.Text.Encodings.Web` from `8.0.0` to `9.0.0`,
+  - `System.Text.Json` from `8.0.5` to `9.0.0`.
+
+### Removed
+
+- Support for .NET 6 and .NET 7. Both framework reached end of support.
+- Support for macOS Monterey 12 x64.
+  macOs libraries are built and tested against [macOS Ventura 13 x64](https://github.com/actions/runner-images/blob/main/images/macos/macos-13-Readme.md).
+- `MongoDB.Driver.Core.Extensions.DiagnosticSources` dependency is removed.
+
+## [1.9.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.9.0)
+
+### Changed
+
+- Musl-based (Alpine) libraries are compiled on Alpine v3.20.
+
+#### Dependency updates
+
+- Following packages updated
+  - `OpenTelemetry.Instrumentation.Wcf` from `1.0.0-rc.17` to `1.0.0-rc.18`,
+- .NET Framework only, following packages updated
+  - `Google.Protobuf` updated from `3.28.2` to `3.28.3`,
+  - `Grpc.Core.Api` from `2.66.0` to `2.67.0`,
+  - `Microsoft.Extensions.DependencyInjection` from `8.0.0` to `8.0.1`,
+  - `Microsoft.Extensions.DependencyInjection.Abstractions` from `8.0.1` to `8.0.2`,
+  - `System.Diagnostics.DiagnosticSource` from `8.0.0` to `8.0.1`,
+  - `System.Text.Json` from `8.0.4` to `8.0.5`.
+
+### Deprecated
+
+- Support for macOS Monterey 12 x64.
+  All further releases will be supporting [macOS Ventura 13 x64](https://github.com/actions/runner-images/blob/main/images/macos/macos-13-Readme.md)
+  and newer.
+
+### Removed
+
+- Drop support for following environment variables:
+  `OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED`,
+  `OTEL_DOTNET_AUTO_METRICS_CONSOLE_EXPORTER_ENABLED`, and
+  `OTEL_DOTNET_AUTO_LOGS_CONSOLE_EXPORTER_ENABLED`.
+  Instead, use `console` as one of the values for the following environment variables:
+  `OTEL_TRACES_EXPORTER`
+  `OTEL_METRICS_EXPORTER`
+  `OTEL_LOGS_EXPORTER`.
+
+## [1.8.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.8.0)
+
+### Added
+
+- Support for Operating System resource detector.
+- Support for [RabbitMQ.Client](https://www.nuget.org/packages/RabbitMQ.Client/)
+  traces instrumentation for versions `6.0.0`-`6.*.*`
+- Support for NServiceBus 9.1+ metrics instrumentations.
+- Added support for OTEL_TRACES_EXPORTER, OTEL_METRICS_EXPORTER, OTEL_LOGS_EXPORTER
+  to handle comma-separated list.
+- The environment variables `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`,
+  and `OTEL_LOGS_EXPORTER` now support configuring console exporters for traces,
+  metrics, and logs, respectively.
+- Support signal specific OTLP exporter variables (See [docs](/docs/config.md#otlp)):
+  - `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
+  - `OTEL_EXPORTER_OTLP_TRACES_HEADERS`,
+  - `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT`,
+  - `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL`,
+  - `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`,
+  - `OTEL_EXPORTER_OTLP_METRICS_HEADERS`,
+  - `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT`,
+  - `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL`,
+  - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`,
+  - `OTEL_EXPORTER_OTLP_LOGS_HEADERS`,
+  - `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT`,
+  - `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL`.
+- Support for air-gapped installations through `DOWNLOAD_DIR` or `LOCAL_PATH`
+  arguments to `otel-dotnet-auto-install.sh`.
+- Added `OTEL_DOTNET_AUTO_LOGGER` to select preferred sink for AutoInstrumentation
+  diagnostic logs.
+- Issue a warning before publish if auto-instrumentation NuGet
+  package is referenced and runtime identifier is not specified.
+
+### Changed
+
+- More restrictive handling of invalid values in comma-separated lists.
+  When invalid value is recognized (unsupported option, supported option
+  with leading or trailing whitespaces, empty value, duplicate)
+  warning is logged, and if `FailFast` is enabled, exception is thrown.
+- Referencing `OpenTelemetry.AutoInstrumentation` manually no longer visibly injects
+  instrumentation scripts into projects in an editor's solution window.
+
+#### Dependency updates
+
+- Following packages updated
+  - `MongoDB.Driver.Core.Extensions.DiagnosticSources` from `1.4.0` to `1.5.0`,
+  - `OpenTelemetry.Exporter.Prometheus.HttpListener` from `1.9.0-beta.1` to `1.9.0-beta.2`,
+  - `OpenTelemetry.Instrumentation.Process` from `0.5.0-beta.6` to `0.5.0-beta.7`,
+  - `OpenTelemetry.Resources.Azure` from `1.0.0-beta.8` to `1.0.0-beta.9`,
+  - `OpenTelemetry.Resources.Host` from `0.1.0-beta.2` to `0.1.0-beta.3`,
+  - `OpenTelemetry.Resources.Process` from `0.1.0-beta.2` to `0.1.0-beta.3`,
+  - `OpenTelemetry.Shims.OpenTracing` from `1.9.0-beta.1` to `1.9.0-beta.2`.
+- .NET only, following packages updated
+  - `OpenTelemetry.Instrumentation.StackExchangeRedis` from `1.0.0-rc9.15` to `1.9.0-beta.1`.
+- .NET Framework only, following packages updated
+  - `Google.Protobuf` updated from `3.27.1` to `3.28.2`,
+  - `Grpc.Core.Api` from `2.63.0` to `2.66.0`,
+  - `Microsoft.Extensions.Configuration.Binder` from `8.0.1` to `8.0.2`,
+  - `System.Text.Json` from `8.0.3` to `8.0.4`.
+
+### Deprecated
+
+- Environment variables `OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED`,
+  `OTEL_DOTNET_AUTO_METRICS_CONSOLE_EXPORTER_ENABLED`, and
+  `OTEL_DOTNET_AUTO_LOGS_CONSOLE_EXPORTER_ENABLED` are now marked as deprecated.
+
+### Removed
+
+- Support for macOS Big Sur 11 x64.
+  macOs libraries are built and tested against [macOS Monterey 12 x64](https://github.com/actions/runner-images/blob/main/images/macos/macos-12-Readme.md).
+- Support for `MongoDB.Driver.Core` < 2.28.0.
+- Support for `StackExchange.Redis` < 2.6.122.
+
+### Fixed
+
+- Initialize WCF instrumentation only when necessary ([#3650](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/pull/3650))
+
+## [1.7.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.7.0)
+
+- [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.9.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.9.0)
+- `System.Diagnostics.DiagnosticSource`: [`8.0.0`](https://www.nuget.org/packages/System.Diagnostics.DiagnosticSource/8.0.0)
+
+### Added
+
+- Support for capturing HTTP headers for following traces instrumentations:
+  - ASP.NET, configurable by
+    `OTEL_DOTNET_AUTO_TRACES_ASPNET_INSTRUMENTATION_CAPTURE_REQUEST_HEADERS`
+    and `OTEL_DOTNET_AUTO_TRACES_ASPNET_INSTRUMENTATION_CAPTURE_RESPONSE_HEADERS`,
+  - ASP.NET Core, configurable by
+    `OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_CAPTURE_REQUEST_HEADERS`
+    and `OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_CAPTURE_RESPONSE_HEADERS`,
+  - HTTP Client, configurable by
+    `OTEL_DOTNET_AUTO_TRACES_HTTP_INSTRUMENTATION_CAPTURE_REQUEST_HEADERS`
+    and `OTEL_DOTNET_AUTO_TRACES_HTTP_INSTRUMENTATION_CAPTURE_RESPONSE_HEADERS`.
+- Support for capturing gRPC metadata for Grpc.Net.Client traces instrumentation.
+  It can by configured by
+  `OTEL_DOTNET_AUTO_TRACES_GRPCNETCLIENT_INSTRUMENTATION_CAPTURE_REQUEST_METADATA`
+  and `OTEL_DOTNET_AUTO_TRACES_GRPCNETCLIENT_INSTRUMENTATION_CAPTURE_RESPONSE_METADATA`.
+- Support for [Oracle.ManagedDataAccess.Core](https://www.nuget.org/packages/Oracle.ManagedDataAccess.Core)
+  and [Oracle.ManagedDataAccess](https://www.nuget.org/packages/Oracle.ManagedDataAccess)
+  traces instrumentation from 23.4.0 together with support for
+  `OTEL_DOTNET_AUTO_ORACLEMDA_SET_DBSTATEMENT_FOR_TEXT` environment variable.
+  ARM64 platform is not supported.
+- Add support for NServiceBus 9.x metrics and traces instrumentations.
+
+### Changed
+
+- Musl-based (Alpine) libraries are compiled on Alpine v3.19.
+- Do not use message creation context as a parent for consumer spans for `Confluent.Kafka`
+  client instrumentation. See the [issue](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/3434)
+  for details.
+- Do not create consumer spans related to `PartitionEOF` events
+  for `Confluent.Kafka` client instrumentation.
+- Following properties can be set before calling plugins:
+  - `OpenTelemetry.Instrumentation.AspNetCore.AspNetCoreTraceInstrumentationOptions.EnrichWithHttpRequest`,
+  - `OpenTelemetry.Instrumentation.AspNetCore.AspNetCoreTraceInstrumentationOptions.EnrichWithHttpResponse`,
+  - `OpenTelemetry.Instrumentation.AspNet.AspNetTraceInstrumentationOptions.EnrichWithHttpRequest`,
+  - `OpenTelemetry.Instrumentation.AspNet.AspNetTraceInstrumentationOptions.EnrichWithHttpResponse`,
+  - `OpenTelemetry.Instrumentation.GrpcNetClient.GrpcClientTraceInstrumentationOptions.EnrichWithHttpRequestMessage`,
+  - `OpenTelemetry.Instrumentation.GrpcNetClient.GrpcClientTraceInstrumentationOptions.EnrichWithHttpResponseMessage`,
+  - `OpenTelemetry.Instrumentation.Http.HttpClientTraceInstrumentationOptions.EnrichWithHttpRequestMessage`,
+  - `OpenTelemetry.Instrumentation.Http.HttpClientTraceInstrumentationOptions.EnrichWithHttpWebRequest`,
+  - `OpenTelemetry.Instrumentation.Http.HttpClientTraceInstrumentationOptions.EnrichWithHttpResponseMessage`,
+  - `OpenTelemetry.Instrumentation.Http.HttpClientTraceInstrumentationOptions.EnrichWithHttpWebResponse`.
+
+#### Dependency updates
+
+- Updated [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.9.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.9.0).
+- Following packages updated
+  - `OpenTelemetry.Exporter.Prometheus.HttpListener` from `1.8.0-rc.1` to `1.9.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.GrpcNetClient` from `1.8.0-beta.1` to `1.9.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.Http` from `1.8.1` to `1.9.0`,
+  - `OpenTelemetry.Instrumentation.Process` from `0.5.0-beta.5` to `0.5.0-beta.6`,
+  - `OpenTelemetry.Instrumentation.Quartz` from `1.0.0-beta.2` to `1.0.0-beta.3`,
+  - `OpenTelemetry.Instrumentation.Runtime` from `1.8.0` to `1.9.0`,
+  - `OpenTelemetry.Instrumentation.SqlClient` from `1.8.0-beta.1` to `1.9.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.StackExchangeRedis` from `1.0.0-rc9.14` to `1.0.0-rc9.15`,
+  - `OpenTelemetry.Instrumentation.Wcf` from `1.0.0-rc.16` to `1.0.0-rc.17`,
+  - `OpenTelemetry.Shims.OpenTracing` from `1.7.0-beta.1` to `1.9.0-beta.1`,
+  - `OpenTelemetry.Resources.Azure` from `1.0.0-beta.7` to `1.0.0-beta.8`,
+  - `OpenTelemetry.Resources.Host` from `0.1.0-beta.1` to `0.1.0-beta.2`.
+  - `OpenTelemetry.Resources.Process` from `0.1.0-beta.1` to `0.1.0-beta.2`.
+  - `OpenTelemetry.Resources.ProcessRuntime` from `0.1.0-beta.1` to `0.1.0-beta.2`.
+- .NET only, following packages updated
+  - `OpenTelemetry.Instrumentation.AspNetCore` from `1.8.1` to `1.9.0`,
+  - `OpenTelemetry.Instrumentation.EntityFrameworkCore` from `1.0.0-beta.11` to `1.0.0-beta.12`,
+  - `OpenTelemetry.Resources.Container` from `1.0.0-beta.7` to `1.0.0-beta.9`.
+- .NET Framework only, following packages updated
+  - `OpenTelemetry.Instrumentation.AspNet` from `1.8.0-beta.2` to `1.9.0-beta.1`.
+
+### Deprecated
+
+- Support for macOS Big Sur 11 x64.
+  All further releases will be supporting [macOS Monterey 12 x64](https://github.com/actions/runner-images/blob/main/images/macos/macos-12-Readme.md)
+  and newer.
+
+## [1.6.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.6.0)
+
+- [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.8.1`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.8.1)
+- `System.Diagnostics.DiagnosticSource`: [`8.0.0`](https://www.nuget.org/packages/System.Diagnostics.DiagnosticSource/8.0.0)
+
+### Changed
+
+- To prevent sensitive information from leaking through query strings, the
+  following instrumentations redact by default any value detected in query string
+  components when building the `url.query` or the `url.full` attributes:
+  `OpenTelemetry.Instrumentation.Http`, `OpenTelemetry.Instrumentation.AspNetCore`,
+  `OpenTelemetry.Instrumentation.AspNet`. For example, `?key1=value1&key2=value2`
+  becomes `?key1=Redacted&key2=Redacted`. You can customize this behavior through
+  the environment variables. See the
+  [instrumentation options](./docs/config.md#instrumentation-options) table for details.
+
+#### Dependency updates
+
+- Following packages updated
+  - `OpenTelemetry.Instrumentation.Http` from `1.8.0` to `1.8.1`.
+- Following packages replaced
+  - `OpenTelemetry.ResourceDetectors.Azure` version `1.0.0-beta.6`
+    by `OpenTelemetry.Resources.Azure` version `1.0.0-beta.7`,
+  - `OpenTelemetry.ResourceDetectors.Host` version `0.1.0-alpha.3`
+    by `OpenTelemetry.Resources.Host` version `0.1.0-beta.1`,
+  - `OpenTelemetry.ResourceDetectors.Process` version `0.1.0-alpha.3`
+    by `OpenTelemetry.Resources.Process` version `0.1.0-beta.1`,
+  - `OpenTelemetry.ResourceDetectors.ProcessRuntime` version `0.1.0-alpha.3`
+    by `OpenTelemetry.Resources.ProcessRuntime` version `0.1.0-beta.1`.
+- .NET only, following packages updated
+  - `Microsoft.Extensions.Configuration.Binder` from `8.0.0` to `8.0.1`,
+  - `OpenTelemetry.Instrumentation.AspNetCore` from `1.8.0` to `1.8.1`.
+- .NET only, following packages replaced:
+  - `OpenTelemetry.ResourceDetectors.Container` version `1.0.0-beta.7`
+    by `OpenTelemetry.Resources.Container` version `1.0.0-beta.8`.
+- .NET Framework only, following packages updated
+  - `Grpc.Core.Api` from `2.62.0` to `2.63.0`,
+  - `OpenTelemetry.Instrumentation.AspNet` from `1.8.0-beta.1` to `1.8.0-beta.2`.
+
+### Fixed
+
+- Stop creating `receive` consumer spans for consume attempts that returned no message.
+  For details, see [#3367](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/3367)
+
+## [1.5.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.5.0)
+
+- Updated [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.8.1`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.8.1).
+- [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.8.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.8.0)
+- `System.Diagnostics.DiagnosticSource`: [`8.0.0`](https://www.nuget.org/packages/System.Diagnostics.DiagnosticSource/8.0.0)
 
 ### Added
 
@@ -16,23 +352,50 @@ This component adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Changed
 
+- Changed supported method parameters for plugins
+  - from `OpenTelemetry.Instrumentation.AspNet.AspNetInstrumentationOptions`
+    to `OpenTelemetry.Instrumentation.AspNet.AspNetTraceInstrumentationOptions`.
+
 #### Dependency updates
 
+- Updated [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
+  [`1.8.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.8.0).
 - Following packages updated
   - `MongoDB.Driver.Core.Extensions.DiagnosticSources` from `1.3.0` to `1.4.0`.
+  - `OpenTelemetry.Exporter.Prometheus.HttpListener` from `1.7.0-rc.1` to `1.8.0-rc.1`,
+  - `OpenTelemetry.Instrumentation.Http` from `1.7.1` to `1.8.0`,
+  - `OpenTelemetry.Instrumentation.Process` from `0.5.0-beta.4` to `0.5.0-beta.5`,
+  - `OpenTelemetry.Instrumentation.Quartz` from `1.0.0-beta.1` to `1.0.0-beta.2`,
+  - `OpenTelemetry.Instrumentation.Runtime` from `1.7.0` to `1.8.0`,
+  - `OpenTelemetry.Instrumentation.SqlClient` from `1.7.0-beta.1` to `1.8.0-beta.1`,
+  - `OpenTelemetry.Instrumentation.StackExchangeRedis` from `1.0.0-rc9.13` to `1.0.0-rc9.14`,
+  - `OpenTelemetry.Instrumentation.Wcf` from `1.0.0-rc.15` to `1.0.0-rc.16`,
+  - `OpenTelemetry.ResourceDetectors.Azure` from `1.0.0-beta.5` to `1.0.0-beta.6`,
+  - `OpenTelemetry.ResourceDetectors.Host` from `0.1.0-alpha.2` to `0.1.0-alpha.3`.
+  - `OpenTelemetry.ResourceDetectors.Process` from `0.1.0-alpha.2` to `0.1.0-alpha.3`.
+  - `OpenTelemetry.ResourceDetectors.ProcessRuntime` from `0.1.0-alpha.2` to `0.1.0-alpha.3`.
+- .NET only, following packages updated
+  - `OpenTelemetry.Instrumentation.AspNetCore` from `1.7.1` to `1.8.0`,
+  - `OpenTelemetry.Instrumentation.EntityFrameworkCore` from `1.0.0-beta.10` to `1.0.0-beta.11`,
+  - `OpenTelemetry.ResourceDetectors.Container` from `1.0.0-beta.6` to `1.0.0-beta.7`.
 - .NET Framework only, following packages updated
-  - `Google.Protobuf` updated from `3.25.2` to `3.25.3`,
-  - `Grpc.Core.Api` from `2.60.0` to `2.61.0`,
+  - `Google.Protobuf` updated from `3.25.2` to `3.27.1`,
+  - `Grpc.Core.Api` from `2.60.0` to `2.62.0`,
   - `Microsoft.Extensions.DependencyInjection.Abstractions` from `8.0.0` to `8.0.1`,
   - `Microsoft.Extensions.Options` from `8.0.1` to `8.0.2`,
   - `Microsoft.Extensions.Logging.Abstractions` from `8.0.0` to `8.0.1`,
+  - `OpenTelemetry.Instrumentation.AspNet` from `1.7.0-beta.2` to `1.8.0-beta.1`,
   - `System.Text.Json` from `8.0.1` to `8.0.3`.
 
-### Deprecated
-
-### Removed
-
 ### Fixed
+
+- Resolved a crash issue caused by `System.IO.FileLoadException` for
+  `Microsoft.Extensions*.dll` libraries. This issue was due to a conflict with
+  runtime store libraries, impacting applications with mismatched dependency
+  versions. This fix enhances stability by addressing the underlying
+  compatibility concerns. For details see:
+  ([#3075](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/3075),
+  [#3168](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/3168))
 
 ## [1.4.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/tag/v1.4.0)
 

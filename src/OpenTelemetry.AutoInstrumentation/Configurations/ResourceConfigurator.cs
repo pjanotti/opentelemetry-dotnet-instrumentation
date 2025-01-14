@@ -2,13 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Runtime.CompilerServices;
-using OpenTelemetry.ResourceDetectors.Azure;
-#if NET6_0_OR_GREATER
-using OpenTelemetry.ResourceDetectors.Container;
-#endif
-using OpenTelemetry.ResourceDetectors.Host;
-using OpenTelemetry.ResourceDetectors.Process;
-using OpenTelemetry.ResourceDetectors.ProcessRuntime;
 using OpenTelemetry.Resources;
 
 namespace OpenTelemetry.AutoInstrumentation.Configurations;
@@ -33,13 +26,14 @@ internal static class ResourceConfigurator
         {
             resourceBuilder = enabledResourceDetector switch
             {
-#if NET6_0_OR_GREATER
+#if NET
                 ResourceDetector.Container => Wrappers.AddContainerResourceDetector(resourceBuilder),
 #endif
                 ResourceDetector.AzureAppService => Wrappers.AddAzureAppServiceResourceDetector(resourceBuilder),
                 ResourceDetector.ProcessRuntime => Wrappers.AddProcessRuntimeResourceDetector(resourceBuilder),
                 ResourceDetector.Process => Wrappers.AddProcessResourceDetector(resourceBuilder),
                 ResourceDetector.Host => Wrappers.AddHostResourceDetector(resourceBuilder),
+                ResourceDetector.OperatingSystem => Wrappers.AddOperatingSystemResourceDetector(resourceBuilder),
                 _ => resourceBuilder
             };
         }
@@ -62,36 +56,42 @@ internal static class ResourceConfigurator
 
     private static class Wrappers
     {
-#if NET6_0_OR_GREATER
+#if NET
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static ResourceBuilder AddContainerResourceDetector(ResourceBuilder resourceBuilder)
         {
-            return resourceBuilder.AddDetector(new ContainerResourceDetector());
+            return resourceBuilder.AddContainerDetector();
         }
 #endif
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static ResourceBuilder AddAzureAppServiceResourceDetector(ResourceBuilder resourceBuilder)
         {
-            return resourceBuilder.AddDetector(new AppServiceResourceDetector());
+            return resourceBuilder.AddAzureAppServiceDetector();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static ResourceBuilder AddProcessRuntimeResourceDetector(ResourceBuilder resourceBuilder)
         {
-            return resourceBuilder.AddDetector(new ProcessRuntimeDetector());
+            return resourceBuilder.AddProcessRuntimeDetector();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static ResourceBuilder AddProcessResourceDetector(ResourceBuilder resourceBuilder)
         {
-            return resourceBuilder.AddDetector(new ProcessDetector());
+            return resourceBuilder.AddProcessDetector();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static ResourceBuilder AddOperatingSystemResourceDetector(ResourceBuilder resourceBuilder)
+        {
+            return resourceBuilder.AddOperatingSystemDetector();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static ResourceBuilder AddHostResourceDetector(ResourceBuilder resourceBuilder)
         {
-            return resourceBuilder.AddDetector(new HostDetector());
+            return resourceBuilder.AddHostDetector();
         }
     }
 }

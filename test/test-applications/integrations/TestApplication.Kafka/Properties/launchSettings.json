@@ -3,7 +3,7 @@
   "profiles": {
     "instrumented": {
       "commandName": "Project",
-      "commandLineArgs": "test-topic",
+      "commandLineArgs": "--topic-name test-topic",
       "environmentVariables": {
         "COR_ENABLE_PROFILING": "1",
         "COR_PROFILER": "{918728DD-259F-4A6A-AC2B-B85E1B658318}",
@@ -17,8 +17,7 @@
         "OTEL_DOTNET_AUTO_HOME": "$(SolutionDir)bin\\tracer-home",
         "OTEL_SERVICE_NAME": "TestApplication.Kafka",
         "OTEL_LOG_LEVEL": "debug",
-        "OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED": "true",
-        "OTEL_DOTNET_AUTO_TRACES_ADDITIONAL_SOURCES": "TestApplication.Kafka"
+        "OTEL_TRACES_EXPORTER": "otlp,console"
       }
     }
   }

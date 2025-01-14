@@ -14,7 +14,6 @@ using Nuke.Common.Tools.NuGet;
 using Nuke.Common.Utilities.Collections;
 using Serilog;
 using static Nuke.Common.EnvironmentInfo;
-using static Nuke.Common.IO.FileSystemTasks;
 using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 partial class Build
@@ -45,15 +44,11 @@ partial class Build
     private static readonly IEnumerable<TargetFramework> TargetFrameworks = new[]
     {
         TargetFramework.NET462,
-        TargetFramework.NET6_0
+        TargetFramework.NET8_0
     };
 
     private static readonly IEnumerable<TargetFramework> TestFrameworks = TargetFrameworks
-        .Concat(TargetFramework.NET7_0
-#if  NET8_0_OR_GREATER
-            , TargetFramework.NET8_0
-#endif
-            );
+        .Concat(TargetFramework.NET9_0);
 
     Target CreateRequiredDirectories => _ => _
         .Unlisted()
@@ -84,13 +79,13 @@ partial class Build
                         .SetVerbosity(DotNetVerbosity.normal)
                         .SetProperty("configuration", BuildConfiguration.ToString())
                         .SetPlatform(Platform)
-                        .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o => o.SetPackageDirectory(NuGetPackagesDirectory));
+                        .When(_ => !string.IsNullOrEmpty(NuGetPackagesDirectory), o => o.SetPackageDirectory(NuGetPackagesDirectory));
 
-                if (LibraryVersion.Versions.TryGetValue(project.Name, out var libraryVersions))
+                if (LibraryVersion.TryGetVersions(project.Name, Platform, out var libraryVersions))
                 {
                     DotNetRestore(s =>
                          Restore(s)
-                         .CombineWithBuildInfos(libraryVersions));
+                            .CombineWithBuildInfos(libraryVersions));
                 }
                 else
                 {
@@ -103,7 +98,8 @@ partial class Build
                 // Projects using `packages.config` can't be restored via "dotnet restore", use a NuGet Task to restore these projects.
                 var legacyRestoreProjects = Solution.GetNativeProjects()
                     .Concat(Solution.GetProjectByName(Projects.Tests.Applications.AspNet))
-                    .Concat(Solution.GetProjectByName(Projects.Tests.Applications.WcfIis));
+                    .Concat(Solution.GetProjectByName(Projects.Tests.Applications.WcfIis))
+                    .Concat(Solution.GetProjectByName(Projects.Tests.Applications.OwinIis));
 
                 RestoreLegacyNuGetPackagesConfig(legacyRestoreProjects);
             }
@@ -166,7 +162,7 @@ partial class Build
                         .SetNoRestore(true)  // project w/ packages.config can't do the restore via dotnet CLI
                         .SetPlatform(Platform)
                         .SetConfiguration(BuildConfiguration)
-                        .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                        .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED,
                             x => x.SetFramework(TestTargetFramework)));
 
                     continue;
@@ -191,23 +187,27 @@ partial class Build
                     }
                 }
 
-                DotNetBuildSettings BuildTestApplication(DotNetBuildSettings x) =>
+                DotNetBuildSettings BuildTestApplication(DotNetBuildSettings x, string targetFramework) =>
                     x.SetProjectFile(app)
                         .SetConfiguration(BuildConfiguration)
                         .SetPlatform(Platform)
                         .SetNoRestore(NoRestore)
-                        .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
-                            s => s.SetFramework(actualTestTfm));
+                        .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                        s => s.SetFramework(targetFramework));
 
                 if (LibraryVersion.Versions.TryGetValue(app.Name, out var libraryVersions))
                 {
-                    DotNetBuild(x =>
-                         BuildTestApplication(x)
-                         .CombineWithBuildInfos(libraryVersions, TestTargetFramework));
+                    foreach (var packageBuildInfo in libraryVersions)
+                    {
+                        var targetFramework = packageBuildInfo.SupportedFrameworks.Length == 0 || packageBuildInfo.SupportedFrameworks.Contains(actualTestTfm) ? actualTestTfm : TestTargetFramework;
+                        DotNetBuild(x =>
+                            BuildTestApplication(x, targetFramework)
+                                .CombineWithBuildInfos([packageBuildInfo], TestTargetFramework));
+                    }
                 }
                 else
                 {
-                    DotNetBuild(BuildTestApplication);
+                    DotNetBuild(x => BuildTestApplication(x, actualTestTfm));
                 }
             }
 
@@ -225,7 +225,7 @@ partial class Build
                     .SetProjectFile(project)
                     .SetConfiguration(BuildConfiguration)
                     .SetNoRestore(NoRestore)
-                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                    .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED,
                         s => s.SetFramework(TestTargetFramework)));
             }
         });
@@ -291,15 +291,15 @@ partial class Build
                 .SetFramework(TargetFramework.NETCore3_1)
                 .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NETCore3_1)));
 
-            // AutoInstrumentationLoader publish is needed only for .NET 6.0 to support load from AutoInstrumentationStartupHook.
+            // AutoInstrumentationLoader publish is needed only for .NET 8.0 to support load from AutoInstrumentationStartupHook.
             DotNetPublish(s => s
                 .SetProject(Solution.GetProjectByName(Projects.AutoInstrumentationLoader))
                 .SetConfiguration(BuildConfiguration)
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
                 .SetNoRestore(NoRestore)
-                .SetFramework(TargetFramework.NET6_0)
-                .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NET6_0)));
+                .SetFramework(TargetFramework.NET8_0)
+                .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NET8_0)));
 
             DotNetPublish(s => s
                 .SetProject(Solution.GetProjectByName(Projects.AutoInstrumentationAspNetCoreBootstrapper))
@@ -307,8 +307,8 @@ partial class Build
                 .SetTargetPlatformAnyCPU()
                 .EnableNoBuild()
                 .SetNoRestore(NoRestore)
-                .SetFramework(TargetFramework.NET6_0)
-                .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NET6_0)));
+                .SetFramework(TargetFramework.NET8_0)
+                .SetOutput(TracerHomeDirectory / MapToFolderOutput(TargetFramework.NET8_0)));
 
             RemoveFilesInNetFolderAvailableInAdditionalStore();
 
@@ -362,6 +362,16 @@ partial class Build
         .DependsOn(PublishNativeProfilerLinux)
         .DependsOn(PublishNativeProfilerMacOs);
 
+    Target VerifySdkVersions => _ => _
+        .Executes(() =>
+        {
+            var verifier = Solution.GetProjectByName(Projects.Tools.SdkVersionAnalyzerTool);
+
+            DotNetRun(s => s
+                .SetProjectFile(verifier)
+                .SetApplicationArguments("--verify", RootDirectory));
+        });
+
     Target GenerateLibraryVersionFiles => _ => _
         .After(PublishManagedProfiler)
         .Executes(() =>
@@ -380,7 +390,7 @@ partial class Build
         {
             var source = RootDirectory / "instrument.sh";
             var dest = TracerHomeDirectory;
-            CopyFileToDirectory(source, dest, FileExistsPolicy.Overwrite);
+            source.CopyToDirectory(dest, ExistsPolicy.FileOverwrite);
         });
 
     Target CopyLegalFiles => _ => _
@@ -391,7 +401,7 @@ partial class Build
         {
             var source = RootDirectory / "LICENSE";
             var dest = TracerHomeDirectory;
-            CopyFileToDirectory(source, dest, FileExistsPolicy.Overwrite);
+            source.CopyToDirectory(dest, ExistsPolicy.FileOverwrite);
         });
 
     Target RunNativeTests => _ => _
@@ -449,7 +459,7 @@ partial class Build
                 .SetProjectFile(Solution.GetProjectByName(Projects.Mocks.AutoInstrumentationMock))
                 .SetConfiguration(BuildConfiguration)
                 .SetNoRestore(NoRestore)
-                .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED,
                     s => s.SetFramework(TestTargetFramework))
             );
         });
@@ -496,7 +506,7 @@ partial class Build
                     .SetNoRestore(NoRestore)
                     .SetProcessEnvironmentVariable("OTEL_DOTNET_AUTO_LOG_DIRECTORY", ProfilerTestLogs)
                     .EnableNoBuild()
-                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                    .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED,
                         x => x.SetFramework(TestTargetFramework))
                     .CombineWith(unitTestProjects, (s, project) => s
                         .EnableTrxLogOutput(GetResultsDirectory(project))
@@ -525,7 +535,7 @@ partial class Build
                     .EnableTrxLogOutput(GetResultsDirectory(project))
                     .SetTargetPath(project)
                     .SetRestore(!NoRestore)
-                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED,
+                    .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED,
                         s => s.SetProperty("TargetFramework", TestTargetFramework.ToString()))
                     .RunTests()
                 );
@@ -583,14 +593,9 @@ partial class Build
                     // To allow roll forward for applications, like Roslyn, that target one tfm
                     // but have a later runtime move the libraries under the original tfm folder
                     // to the latest one.
-                    if (folderRuntimeName == TargetFramework.NET6_0)
+                    if (folderRuntimeName == TargetFramework.NET8_0 || folderRuntimeName == TargetFramework.NET9_0)
                     {
-                        depsJson.RollFrameworkForward(TargetFramework.NET6_0, TargetFramework.NET8_0, architectureStores);
-                    }
-                    else if (folderRuntimeName == TargetFramework.NET7_0 || folderRuntimeName == TargetFramework.NET8_0)
-                    {
-                        depsJson.RollFrameworkForward(TargetFramework.NET6_0, TargetFramework.NET8_0, architectureStores);
-                        depsJson.RollFrameworkForward(TargetFramework.NET7_0, TargetFramework.NET8_0, architectureStores);
+                        depsJson.RollFrameworkForward(TargetFramework.NET8_0, TargetFramework.NET9_0, architectureStores);
                     }
 
                     // Write the updated deps.json file.
@@ -712,7 +717,7 @@ partial class Build
                     .EnableTrxLogOutput(GetResultsDirectory(project))
                     .SetProjectFile(project)
                     .SetFilter(AndFilter(TestNameFilter(), testName))
-                    .When(TestTargetFramework != TargetFramework.NOT_SPECIFIED, s => s.SetFramework(TestTargetFramework))
+                    .When(_ => TestTargetFramework != TargetFramework.NOT_SPECIFIED, s => s.SetFramework(TestTargetFramework))
                     .SetProcessEnvironmentVariable("OTEL_DOTNET_AUTO_LOG_DIRECTORY", ProfilerTestLogs)
                     .SetProcessEnvironmentVariable("BOOSTRAPPING_TESTS", "true"));
             }
@@ -733,7 +738,7 @@ partial class Build
                 .SetTargetPath(project)
                 .SetSolutionDirectory(Solution.Directory)
                 .SetVerbosity(NuGetVerbosity.Normal)
-                .When(!string.IsNullOrEmpty(NuGetPackagesDirectory), o =>
+                .When(_ => !string.IsNullOrEmpty(NuGetPackagesDirectory), o =>
                     o.SetPackagesDirectory(NuGetPackagesDirectory)));
         }
     }

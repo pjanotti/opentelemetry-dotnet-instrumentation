@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using OpenTelemetry.AutoInstrumentation.DuckTyping;
 using OpenTelemetry.AutoInstrumentation.Instrumentations.Kafka.DuckTypes;
@@ -12,59 +13,41 @@ namespace OpenTelemetry.AutoInstrumentation.Instrumentations.Kafka;
 
 internal static class KafkaInstrumentation
 {
-    private static ActivitySource Source { get; } = new("OpenTelemetry.AutoInstrumentation.Kafka");
+    private static readonly ActivitySource Source = new("OpenTelemetry.AutoInstrumentation.Kafka");
 
-    public static Activity? StartConsumerActivity(IConsumeResult? consumeResult, DateTimeOffset startTime, object consumer)
+    public static Activity? StartConsumerActivity(IConsumeResult consumeResult, DateTimeOffset startTime, object consumer)
     {
-        PropagationContext? propagatedContext = null;
-        if (consumeResult is not null)
-        {
-            propagatedContext = Propagators.DefaultTextMapPropagator.Extract(default, consumeResult, MessageHeaderValueGetter);
-        }
+        PropagationContext? propagatedContext = Propagators.DefaultTextMapPropagator.Extract(default, consumeResult, MessageHeaderValueGetter);
 
         string? spanName = null;
-        if (!string.IsNullOrEmpty(consumeResult?.Topic))
+        if (!string.IsNullOrEmpty(consumeResult.Topic))
         {
-            spanName = $"{consumeResult?.Topic} {MessagingAttributes.Values.ReceiveOperationName}";
+            spanName = $"{consumeResult.Topic} {MessagingAttributes.Values.ReceiveOperationName}";
         }
 
         spanName ??= MessagingAttributes.Values.ReceiveOperationName;
 
-        var activityLinks = propagatedContext is not null && propagatedContext.Value.ActivityContext.IsValid()
+        var activityLinks = propagatedContext.Value.ActivityContext.IsValid()
             ? new[] { new ActivityLink(propagatedContext.Value.ActivityContext) }
             : Array.Empty<ActivityLink>();
 
-        // https://github.com/open-telemetry/oteps/blob/5531cb2cb61df5ff9660d1078613e6c09cb396a8/text/trace/0220-messaging-semantic-conventions-span-structure.md?plain=1#L200
-        // If consumer span would be a root span of a new trace,
-        // use message's creation context as a parent,
-        // in addition to linking to it.
-        var parentContext =
-            Activity.Current is null ?
-            propagatedContext?.ActivityContext ?? default :
-            default;
-
         var activity = Source.StartActivity(
-            spanName,
+            name: spanName,
             kind: ActivityKind.Consumer,
             links: activityLinks,
-            startTime: startTime,
-            parentContext: parentContext,
-            tags: null);
+            startTime: startTime);
 
         if (activity is { IsAllDataRequested: true })
         {
             SetCommonAttributes(
                 activity,
                 MessagingAttributes.Values.ReceiveOperationName,
-                consumeResult?.Topic,
-                consumeResult?.Partition,
-                consumeResult?.Message?.Key,
+                consumeResult.Topic,
+                consumeResult.Partition,
+                consumeResult.Message?.Key,
                 consumer.DuckCast<INamedClient>());
 
-            if (consumeResult is not null)
-            {
-                activity.SetTag(MessagingAttributes.Keys.Kafka.PartitionOffset, consumeResult.Offset.Value);
-            }
+            activity.SetTag(MessagingAttributes.Keys.Kafka.PartitionOffset, consumeResult.Offset.Value);
 
             if (ConsumerCache.TryGet(consumer, out var groupId))
             {
@@ -75,10 +58,13 @@ internal static class KafkaInstrumentation
         return activity;
     }
 
-    public static Activity? StartProducerActivity(
-        ITopicPartition partition,
-        IKafkaMessage message,
-        INamedClient producer)
+    public static Activity? StartProducerActivity<TTopicPartition, TMessage, TClient>(
+        TTopicPartition partition,
+        TMessage message,
+        TClient producer)
+    where TTopicPartition : ITopicPartition
+    where TMessage : IKafkaMessage
+    where TClient : INamedClient
     {
         string? spanName = null;
         if (!string.IsNullOrEmpty(partition.Topic))
@@ -104,7 +90,8 @@ internal static class KafkaInstrumentation
         return activity;
     }
 
-    public static void InjectContext<TTopicPartition>(IKafkaMessage message, Activity activity)
+    public static void InjectContext<TTopicPartition, TMessage>(TMessage message, Activity activity)
+    where TMessage : IKafkaMessage
     {
         message.Headers ??= MessageHeadersHelper<TTopicPartition>.Create();
         Propagators.DefaultTextMapPropagator.Inject(
@@ -121,6 +108,16 @@ internal static class KafkaInstrumentation
         activity.SetTag(
             MessagingAttributes.Keys.Kafka.PartitionOffset,
             deliveryResult.Offset.Value);
+    }
+
+    internal static string? ExtractMessageKeyValue(object key)
+    {
+        return key switch
+        {
+            string s => s,
+            int or uint or long or ulong or float or double or decimal => Convert.ToString(key, CultureInfo.InvariantCulture),
+            _ => null
+        };
     }
 
     private static void SetCommonAttributes(
@@ -145,7 +142,11 @@ internal static class KafkaInstrumentation
 
         if (key is not null)
         {
-            activity.SetTag(MessagingAttributes.Keys.Kafka.MessageKey, key);
+            var keyValue = ExtractMessageKeyValue(key);
+            if (keyValue is not null)
+            {
+                activity.SetTag(MessagingAttributes.Keys.Kafka.MessageKey, keyValue);
+            }
         }
 
         if (partition is not null)
@@ -164,7 +165,8 @@ internal static class KafkaInstrumentation
         return Enumerable.Empty<string>();
     }
 
-    private static void MessageHeaderValueSetter(IKafkaMessage msg, string key, string val)
+    private static void MessageHeaderValueSetter<TMessage>(TMessage msg, string key, string val)
+    where TMessage : IKafkaMessage
     {
         msg.Headers?.Remove(key);
         msg.Headers?.Add(key, Encoding.UTF8.GetBytes(val));

@@ -142,6 +142,14 @@ internal class InternalLogger : IOtelLogger
     public void Error(Exception exception, string messageTemplate, object[] args, bool writeToEventLog)
         => Write(LogLevel.Error, exception, messageTemplate, args, writeToEventLog);
 
+    public void Dispose()
+    {
+        if (_sink is IDisposable disposableSink)
+        {
+            disposableSink.Dispose();
+        }
+    }
+
     private static void WriteEventSourceLog(LogLevel level, string message)
     {
         switch (level)
@@ -201,7 +209,8 @@ internal class InternalLogger : IOtelLogger
     {
         try
         {
-            var rawMessage = string.Format(messageTemplate, args);
+            // Use template if no arguments provided, otherwise format the template with provided arguments.
+            var rawMessage = args == NoPropertyValues ? messageTemplate : string.Format(messageTemplate, args);
             if (exception != null)
             {
                 rawMessage += $"{Environment.NewLine}Exception: {exception.Message}{Environment.NewLine}{exception}";

@@ -2,13 +2,15 @@
   <Import Project="..\Directory.Build.props" />
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);net462</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <EnablePublicApi>true</EnablePublicApi>
     <DebugType>portable</DebugType>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)keypair.snk</AssemblyOriginatorKeyFile>
 
     <!-- NuGet packages -->
     <IsPackable>true</IsPackable>
@@ -26,20 +28,12 @@
     <Authors>OpenTelemetry Authors</Authors>
     <!-- No warning on empty NuGet version suffix even if using pre-release dependencies -->
     <NoWarn>$(NoWarn);NU5104</NoWarn>
-    <!--
-       No warn to mitigate following warnings for transitive dependencies:
-       error NU1902: Warning As Error: Package 'SharpCompress' 0.23.0 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-jp7f-grcv-6mjf
-       error NU1904: Warning As Error: Package 'System.Drawing.Common' 4.7.0 has a known critical severity vulnerability, https://github.com/advisories/GHSA-rxg9-xrhp-64gj
-    -->
-    <NoWarn>$(NoWarn);NU1902;NU1904</NoWarn>
+
+    <EmbedUntrackedSources Condition=" '$(TargetFramework)' == 'net462' ">true</EmbedUntrackedSources>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="DotNet.ReproducibleBuilds">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.SourceLink.GitHub">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

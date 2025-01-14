@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using IntegrationTests.Helpers;
+using OpenTelemetry.AutoInstrumentation.Configurations;
 using Xunit.Abstractions;
 
 namespace IntegrationTests;
@@ -17,20 +18,10 @@ public class SqlClientMicrosoftTests : TestHelper
         _sqlServerFixture = sqlServerFixture;
     }
 
-    public static IEnumerable<object[]> GetData()
-    {
-#if NETFRAMEWORK
-        // 3.1.* is not supported on .NET Framework. For details check: https://github.com/open-telemetry/opentelemetry-dotnet/issues/4243
-        return LibraryVersion.SqlClientMicrosoft.Where(x => !x.First().ToString().StartsWith("3.1."));
-#else
-        return LibraryVersion.SqlClientMicrosoft;
-#endif
-    }
-
     [SkippableTheory]
     [Trait("Category", "EndToEnd")]
     [Trait("Containers", "Linux")]
-    [MemberData(nameof(GetData))]
+    [MemberData(nameof(LibraryVersion.SqlClientMicrosoft), MemberType = typeof(LibraryVersion))]
     public void SubmitTraces(string packageVersion)
     {
         // Skip the test if fixture does not support current platform
@@ -47,5 +38,39 @@ public class SqlClientMicrosoftTests : TestHelper
         });
 
         collector.AssertExpectations();
+    }
+
+    [SkippableTheory]
+    [Trait("Category", "EndToEnd")]
+    [Trait("Containers", "Linux")]
+    [MemberData(nameof(LibraryVersion.SqlClientMicrosoft), MemberType = typeof(LibraryVersion))]
+    public void SubmitMetrics(string packageVersion)
+    {
+        // Skip the test if fixture does not support current platform
+        _sqlServerFixture.SkipIfUnsupportedPlatform();
+
+        using var collector = new MockMetricsCollector(Output);
+        SetExporter(collector);
+
+        collector.Expect("OpenTelemetry.Instrumentation.SqlClient");
+
+        SetEnvironmentVariable("LONG_RUNNING", "true");
+        SetEnvironmentVariable("OTEL_METRIC_EXPORT_INTERVAL", "100");
+        SetEnvironmentVariable(ConfigurationKeys.Traces.TracesEnabled, bool.FalseString); // make sure that traces instrumentation is not needed
+
+        using var process = StartTestApplication(new TestSettings
+        {
+            Arguments = $"{_sqlServerFixture.Password} {_sqlServerFixture.Port}",
+            PackageVersion = packageVersion
+        });
+
+        try
+        {
+            collector.AssertExpectations();
+        }
+        finally
+        {
+            process?.Kill();
+        }
     }
 }

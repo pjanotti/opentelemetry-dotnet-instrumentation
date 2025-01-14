@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" VersionOverride="$(LibraryVersion)" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Compile Include="..\TestApplication.OracleMda.NetFramework\Program.cs" Link="Program.cs" />
+  </ItemGroup>
+  
+</Project>

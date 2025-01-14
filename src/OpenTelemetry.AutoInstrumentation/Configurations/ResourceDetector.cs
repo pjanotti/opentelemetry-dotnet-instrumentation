@@ -8,7 +8,7 @@ namespace OpenTelemetry.AutoInstrumentation.Configurations;
 /// </summary>
 internal enum ResourceDetector
 {
-#if NET6_0_OR_GREATER
+#if NET
     /// <summary>
     /// Container resource detector.
     /// </summary>
@@ -33,5 +33,10 @@ internal enum ResourceDetector
     /// <summary>
     /// Host resource detector.
     /// </summary>
-    Host = 4
+    Host = 4,
+
+    /// <summary>
+    /// Operating System resource detector.
+    /// </summary>
+    OperatingSystem = 5,
 }

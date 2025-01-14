@@ -1,9 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// This test is defined in NET8.0 because the tool is written in .NET 8.0
-// The actual test is testing .NET 462 context.
-#if NET8_0_OR_GREATER
+// This test is defined in NET 9.0 because the tool is written in .NET 9.0
+// The actual test is testing .NET Framework 4.6.2 context.
+#if NET9_0_OR_GREATER
 
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -28,20 +28,20 @@ public class TransientDependenciesTests
         var codeDir = Path.Combine(srcDir, "OpenTelemetry.AutoInstrumentation");
         var projectPath = Path.Combine(codeDir, "OpenTelemetry.AutoInstrumentation.csproj");
         var projectGenPath = Path.Combine(codeDir, "OpenTelemetry.AutoInstrumentation.g.csproj");
-        var commonExcludedAssetsPath = Path.Combine(srcDir, "CommonExcludedAssets.props");
 
         File.Copy(projectPath, projectGenPath, overwrite: true);
-
-        var excludedDependencies = ReadExcludedDependencies(commonExcludedAssetsPath);
 
         var deps = ReadTransientDeps(projectGenPath);
 
         CleanTransientDeps(projectGenPath);
 
         var generatedDeps = Generator
-            .EnumerateDependencies(projectGenPath, excludedDependencies)
+            .EnumerateDependencies(projectGenPath)
             .Select(x => x.Name)
             .ToList();
+
+        // TODO automate detecting new transitive dependencies https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/3817
+        generatedDeps.Add("System.IO.Pipelines");
 
         File.Delete(projectGenPath);
 
@@ -50,17 +50,6 @@ public class TransientDependenciesTests
             deps.Count.Should().Be(generatedDeps.Count);
             deps.Should().BeEquivalentTo(generatedDeps);
         }
-    }
-
-    private static IReadOnlyCollection<string> ReadExcludedDependencies(string commonExcludedAssetsPath)
-    {
-        var projXml = XElement.Load(commonExcludedAssetsPath);
-        return projXml
-            .Elements("ItemGroup")
-            .First(x => x.Attribute("Condition") == null)
-            .Descendants("PackageReference")
-            .Select(x => x.Attribute("Include")!.Value)
-            .ToList();
     }
 
     private static XElement? GetTransientDepsGroup(XElement projXml)

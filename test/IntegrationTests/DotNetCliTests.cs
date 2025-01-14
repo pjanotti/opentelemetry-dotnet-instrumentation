@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#if !NETFRAMEWORK
+#if NET
 
 using FluentAssertions;
 using IntegrationTests.Helpers;
@@ -83,7 +83,7 @@ Console.WriteLine(response.StatusCode);
 
         process.Should().NotBeNull();
 
-        bool processTimeout = !process!.WaitForExit((int)TestTimeout.ProcessExit.TotalMilliseconds);
+        var processTimeout = !process!.WaitForExit((int)TestTimeout.ProcessExit.TotalMilliseconds);
         if (processTimeout)
         {
             process.Kill();
@@ -102,11 +102,7 @@ Console.WriteLine(response.StatusCode);
         var collector = new MockSpansCollector(Output);
         SetExporter(collector);
 
-#if NET7_0_OR_GREATER
         collector.Expect("System.Net.Http");
-#else
-        collector.Expect("OpenTelemetry.Instrumentation.Http.HttpClient");
-#endif
 
         RunDotNetCli(arguments);
 

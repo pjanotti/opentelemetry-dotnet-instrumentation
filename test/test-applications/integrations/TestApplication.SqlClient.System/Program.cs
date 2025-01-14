@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Data.SqlClient;
+using System.Diagnostics;
 using TestApplication.Shared;
 
 namespace TestApplication.SqlClient.System;
+#pragma warning disable CS0618 // Type or member is obsolete, System.Data.SqlClient classes are deprecated in 4.9.0+
 
 /// <summary>
 /// This test application uses SqlConnection from System.Data.SqlClient (NuGet package).
@@ -31,6 +33,19 @@ public class Program
         using (var connection = new SqlConnection(connectionString))
         {
             await ExecuteAsyncCommands(connection);
+        }
+
+        // The "LONG_RUNNING" environment variable is used by tests that access/receive
+        // data that takes time to be produced.
+        var longRunning = Environment.GetEnvironmentVariable("LONG_RUNNING");
+        if (longRunning == "true")
+        {
+            // In this case it is necessary to ensure that the test has a chance to read the
+            // expected data, only by keeping the application alive for some time that can
+            // be ensured. Anyway, tests that set "LONG_RUNNING" env var to true are expected
+            // to kill the process directly.
+            Console.WriteLine("LONG_RUNNING is true, waiting for process to be killed...");
+            Process.GetCurrentProcess().WaitForExit();
         }
     }
 
@@ -135,3 +150,4 @@ public class Program
         return (DatabasePassword: args[0], Port: args[1]);
     }
 }
+#pragma warning restore CS0618 // Type or member is obsolete

@@ -328,7 +328,14 @@ internal static partial class DuckType
             // If the proxy type definition is an interface we create an struct proxy
             // If the proxy type definition is an struct then we use that struct to copy the values from the target type
             parentType = typeof(ValueType);
-            typeAttributes = TypeAttributes.Public | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit | TypeAttributes.SequentialLayout | TypeAttributes.Sealed | TypeAttributes.Serializable;
+            typeAttributes = TypeAttributes.Public | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit | TypeAttributes.SequentialLayout | TypeAttributes.Sealed
+#pragma warning disable SYSLIB0050
+                             // TypeAttributes.Serializable is obsolete. There is a recommendation to keep code as is.
+                             // to mitigate potential unknown issues.
+                             // Historically, t was working fine with binaries compiled against .NET6 executed in .NET8 runtime.
+                             // https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/issues/3799
+                             | TypeAttributes.Serializable;
+#pragma warning restore SYSLIB0050
             if (typeToDeriveFrom.IsInterface)
             {
                 interfaceTypes = new[] { typeToDeriveFrom, typeof(IDuckType) };

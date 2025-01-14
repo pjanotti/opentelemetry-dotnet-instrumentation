@@ -22,35 +22,34 @@ jobs:
             containers: windows
           - machine: ubuntu-20.04
             containers: linux
-          - machine: macos-11
+          - machine: macos-13
             containers: none
-          - machine: actuated-arm64-4cpu-8gb
+          - machine: otel-linux-arm64
             containers: linux
     runs-on: ${{ matrix.machine }}
     steps:
       
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # tag: v4.2.2
 
       - name: Setup ARM64 Environment Variables
-        if: ${{ matrix.machine == 'actuated-arm64-4cpu-8gb' }}
+        if: ${{ matrix.machine == 'otel-linux-arm64' }}
         run: |
           echo "DOTNET_INSTALL_DIR=~/.dotnet" >> $GITHUB_ENV
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4.0.0
+        uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # tag: v4.2.0
         with:
           dotnet-version: | 
-            6.0.420
-            7.0.407
-            8.0.203
+            8.0.404
+            9.0.101
 
       - name: Run BuildTracer and ManagedTests
         run: ./build.cmd BuildTracer ManagedTests --containers ${{ matrix.containers }} --test-project "${{ github.event.inputs.testProject }}" --test-name '"${{ github.event.inputs.testName }}"' --test-count ${{ github.event.inputs.count }}
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4.3.1
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # tag: v4.6.0
         with:
           name: logs-${{ matrix.machine }}
           path: test-artifacts/

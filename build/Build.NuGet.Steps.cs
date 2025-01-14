@@ -5,7 +5,6 @@ using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 using Nuke.Common.Tools.NuGet;
 using Nuke.Common.Utilities.Collections;
-using static Nuke.Common.IO.FileSystemTasks;
 using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
 partial class Build
@@ -53,8 +52,8 @@ partial class Build
                 "bin-alpine-x64/linux-musl-x64",
                 "bin-alpine-arm64/linux-musl-arm64",
                 "bin-ubuntu-20.04/linux-x64",
-                "bin-actuated-arm64-4cpu-8gb/linux-arm64",
-                "bin-macos-11/osx-x64",
+                "bin-otel-linux-arm64/linux-arm64",
+                "bin-macos-13/osx-x64",
                 "bin-windows-2022/win-x64",
                 "bin-windows-2022/win-x86"
             };
@@ -67,7 +66,7 @@ partial class Build
                 var destinationPath = baseRuntimeNativePath / "runtimes" / platformAndArchitecture / "native";
                 destinationPath.DeleteDirectory();
 
-                CopyDirectoryRecursively(sourcePath, destinationPath);
+                sourcePath.Copy(destinationPath);
             }
         });
 
@@ -151,28 +150,21 @@ partial class Build
         .Description("Builds the TestApplications.* used by the NuGetPackagesTests")
         .Executes(() =>
         {
-            string MapToNet8RuntimeIdentifiers(string oldRuntimeIdentifier)
-            {
-#if NET8_0_OR_GREATER
-                return oldRuntimeIdentifier;
-#else
-                switch (oldRuntimeIdentifier)
-                {
-                    case "ubuntu.20.04-x64": return "linux-x64";
-                    case "osx.11.0-x64": return "osx-x64";
-                    case "win10-x64": return "win-x64";
-                }
-                throw new NotSupportedException($"{oldRuntimeIdentifier} is not supported. Extend MapToNet8RuntimeIdentifiers.");
-#endif
-            }
-
             foreach (var packagesTestApplicationProject in Solution.GetNuGetPackagesTestApplications())
             {
                 // Unlike the integration apps these require a restore step.
                 DotNetBuild(s => s
                     .SetProjectFile(packagesTestApplicationProject)
                     .SetProperty("NuGetPackageVersion", VersionHelper.GetVersion())
-                    .SetRuntime(MapToNet8RuntimeIdentifiers(RuntimeInformation.RuntimeIdentifier))
+                    .SetRuntime(RuntimeInformation.RuntimeIdentifier)
+                    .SetSelfContained(true)
+                    .SetConfiguration(BuildConfiguration)
+                    .SetPlatform(Platform));
+
+                // Build framework-dependent without specifying runtime identifier
+                DotNetBuild(s => s
+                    .SetProjectFile(packagesTestApplicationProject)
+                    .SetProperty("NuGetPackageVersion", VersionHelper.GetVersion())
                     .SetConfiguration(BuildConfiguration)
                     .SetPlatform(Platform));
             }

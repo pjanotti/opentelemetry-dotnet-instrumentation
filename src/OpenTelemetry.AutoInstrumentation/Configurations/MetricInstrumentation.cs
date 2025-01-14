@@ -35,10 +35,15 @@ internal enum MetricInstrumentation
     /// </summary>
     NServiceBus = 5,
 
-#if NET6_0_OR_GREATER
+#if NET
     /// <summary>
     /// ASP.NET Core instrumentation.
     /// </summary>
-    AspNetCore = 6
+    AspNetCore = 6,
 #endif
+
+    /// <summary>
+    /// SqlClient instrumentation.
+    /// </summary>
+    SqlClient = 7
 }

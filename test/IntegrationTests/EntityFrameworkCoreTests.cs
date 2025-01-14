@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#if NET6_0_OR_GREATER
+#if NET
 
 using IntegrationTests.Helpers;
 using Xunit.Abstractions;
@@ -15,13 +15,17 @@ public class EntityFrameworkCoreTests : TestHelper
     {
     }
 
-    public static IEnumerable<object[]> GetData()
+    public static TheoryData<string, bool> GetData()
     {
+        var theoryData = new TheoryData<string, bool>();
+
         foreach (var version in LibraryVersion.EntityFrameworkCore)
         {
-            yield return new[] { version[0], true };
-            yield return new[] { version[0], false };
+            theoryData.Add(version, true);
+            theoryData.Add(version, false);
         }
+
+        return theoryData;
     }
 
     [Theory]

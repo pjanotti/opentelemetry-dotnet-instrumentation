@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#if NET6_0_OR_GREATER
+#if NET
 
 using System.Net;
 using System.Text;
@@ -18,10 +18,18 @@ public class GraphQLTests : TestHelper
     {
     }
 
-    public static IEnumerable<object[]> GetData()
-        => from packageVersionArray in LibraryVersion.GraphQL
-           from setDocument in new[] { true, false }
-           select new[] { packageVersionArray[0], setDocument };
+    public static TheoryData<string, bool> GetData()
+    {
+        var theoryData = new TheoryData<string, bool>();
+
+        foreach (var version in LibraryVersion.GraphQL)
+        {
+            theoryData.Add(version, true);
+            theoryData.Add(version, false);
+        }
+
+        return theoryData;
+    }
 
     [Theory]
     [Trait("Category", "EndToEnd")]
@@ -55,7 +63,7 @@ public class GraphQLTests : TestHelper
 
         SetEnvironmentVariable("OTEL_DOTNET_AUTO_GRAPHQL_SET_DOCUMENT", setDocument.ToString());
         SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_INSTRUMENTATION_ENABLED", "false");
-        SetEnvironmentVariable("OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED", "false"); // disable metrics to disable side effect of AspNetCore - working propagation on .NET6 and .NET7
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_METRICS_INSTRUMENTATION_ENABLED", "false"); // disable metrics to disable side effect of AspNetCore - working propagation on .NET
         SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_GRAPHQL_INSTRUMENTATION_ENABLED", "true");
         SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_ENABLED", "true"); // AspNetCore Instrumentation enables propagation used in this test
         SetEnvironmentVariable("OTEL_TRACES_SAMPLER", "always_on");

@@ -62,7 +62,7 @@ When adding the NuGet packages to your project you get an error message similar
 to:
 
 ```txt
-Could not install package 'OpenTelemetry.AutoInstrumentation.Runtime.Native 1.4.0'. You are trying to install this package into a project that targets '.NETFramework,Version=v4.7.2', but the package does not contain any assembly references or content files that are compatible with that framework. For more information, contact the package author.
+Could not install package 'OpenTelemetry.AutoInstrumentation.Runtime.Native 1.9.0'. You are trying to install this package into a project that targets '.NETFramework,Version=v4.7.2', but the package does not contain any assembly references or content files that are compatible with that framework. For more information, contact the package author.
 ```
 
 #### Solution
@@ -139,20 +139,17 @@ File name: 'Microsoft.Extensions.DependencyInjection.Abstractions, Version=7.0.0
 
 #### Solution
 
-OpenTelemetry .NET NuGet packages and its dependencies
-are deployed with the OpenTelemetry .NET Automatic Instrumentation.
+OpenTelemetry .NET NuGet packages and their dependencies
+are deployed with the OpenTelemetry .NET Automatic Instrumentation. To avoid
+dependency version conflicts, the recommended way to install the automatic
+instrumentation is using the NuGet packages. For instructions on how to add the
+packages to your application, and the limitations of this installation method,
+see [Using the OpenTelemetry.AutoInstrumentation NuGet packages](./using-the-nuget-packages.md#using-the-opentelemetryautoinstrumentation-nuget-packages). 
 
-To handle dependency versions conflicts,
-update the instrumented application's project references
+Alternatively, you can handle the dependency versions conflicts by
+updating the instrumented application's project references
 to use the same versions as OpenTelemetry .NET Automatic Instrumentation.
 
-A simple way to ensure that no such conflicts happen is to add the
-`OpenTelemetry.AutoInstrumentation` package to your application.
-For instructions about how to add it to your application, see
-[Using the OpenTelemetry.AutoInstrumentation NuGet packages](./using-the-nuget-packages.md#using-the-opentelemetryautoinstrumentation-nuget-packages)
-.
-
-Alternatively add only the conflicting packages to your project.
 The following dependencies are used by OpenTelemetry .NET Automatic Instrumentation:
 
 - [OpenTelemetry.AutoInstrumentation](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/src/OpenTelemetry.AutoInstrumentation/OpenTelemetry.AutoInstrumentation.csproj)

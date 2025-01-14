@@ -3,7 +3,6 @@
 [![Slack](https://img.shields.io/badge/slack-@cncf/otel--dotnet--auto--instr-brightgreen.svg?logo=slack)](https://cloud-native.slack.com/archives/C01NR1YLSE7)
 [![NuGet](https://img.shields.io/nuget/v/OpenTelemetry.AutoInstrumentation.svg)](https://www.nuget.org/packages/OpenTelemetry.AutoInstrumentation)
 [![NuGet](https://img.shields.io/nuget/dt/OpenTelemetry.AutoInstrumentation.svg)](https://www.nuget.org/packages/OpenTelemetry.AutoInstrumentation)
-[![Arm CI sponsored by Actuated](https://img.shields.io/badge/SA_actuated.dev-004BDD)](https://actuated.dev/)
 
 This project adds [OpenTelemetry instrumentation](https://opentelemetry.io/docs/concepts/instrumenting/#automatic-instrumentation)
 to .NET applications without having to modify their source code.
@@ -13,28 +12,34 @@ to .NET applications without having to modify their source code.
 > [!WARNING]
 > The following documentation refers to the in-development version
 of OpenTelemetry .NET Automatic Instrumentation. Docs for the latest version
-([1.4.0](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest))
-can be found in [opentelemetry.io](https://github.com/open-telemetry/opentelemetry.io/tree/main/content/en/docs/languages/net/automatic)
-or [here](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/v1.4.0/docs/README.md).
+([1.10.0-beta.1](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest))
+can be found in [opentelemetry.io](https://opentelemetry.io/docs/zero-code/net/)
+or [here](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/v1.10.0-beta.1/docs/README.md).
 
 ---
 
 ## Quick start
 
 If you'd like to try the instrumentation on an existing application before
-learning more about the configuration options and the project, follow the
-instructions at [Using the OpenTelemetry.AutoInstrumentation NuGet packages](./using-the-nuget-packages.md#using-the-opentelemetryautoinstrumentation-nuget-packages)
+learning more about the configuration options and the project, use the
+recommended installation method described at
+[Using the OpenTelemetry.AutoInstrumentation NuGet packages](./using-the-nuget-packages.md#using-the-opentelemetryautoinstrumentation-nuget-packages)
 or use the appropriate install script:
 
 - On Linux and macOS, use the [shell scripts](#shell-scripts).
 - On Windows, use the [PowerShell module](#powershell-module-windows).
 
-To see the telemetry from your application directly on the standard output, set
-the following environment variables to `true` before launching your application:
+> [!NOTE]
+> The NuGet packages are the recommended way to deploy automatic instrumentation,
+> but they can't be used in all cases. See [Limitations](./using-the-nuget-packages.md#limitations)
+> for details.
 
-- `OTEL_DOTNET_AUTO_LOGS_CONSOLE_EXPORTER_ENABLED`
-- `OTEL_DOTNET_AUTO_METRICS_CONSOLE_EXPORTER_ENABLED`
-- `OTEL_DOTNET_AUTO_TRACES_CONSOLE_EXPORTER_ENABLED`
+To see the telemetry from your application directly on the standard output, set
+the following environment variables to `console` before launching your application:
+
+- `OTEL_TRACES_EXPORTER`
+- `OTEL_METRICS_EXPORTER`
+- `OTEL_LOGS_EXPORTER`
 
 For a demo using `docker compose`, clone this repository and
 follow the [examples/demo/README.md](../examples/demo/README.md).
@@ -45,8 +50,8 @@ OpenTelemetry .NET Automatic Instrumentation is built on top of
 [OpenTelemetry .NET](https://github.com/open-telemetry/opentelemetry-dotnet):
 
 - [Core components](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/VERSIONING.md#core-components):
-[`1.7.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.7.0)
-- `System.Diagnostics.DiagnosticSource`: [`8.0.0`](https://www.nuget.org/packages/System.Diagnostics.DiagnosticSource/8.0.0)
+[`1.10.0`](https://github.com/open-telemetry/opentelemetry-dotnet/releases/tag/core-1.10.0)
+- `System.Diagnostics.DiagnosticSource`: [`9.0.0`](https://www.nuget.org/packages/System.Diagnostics.DiagnosticSource/9.0.0)
   referencing `System.Runtime.CompilerServices.Unsafe`: [`6.0.0`](https://www.nuget.org/packages/System.Runtime.CompilerServices.Unsafe/6.0.0)
 
 You can find all references in
@@ -76,7 +81,7 @@ can be found in the [versioning documentation](versioning.md).
 
 ## Compatibility
 
-OpenTelemetry .NET Automatic Instrumentation attempts to work with all officially
+OpenTelemetry .NET Automatic Instrumentation should work with all officially
 supported operating systems and versions of
 [.NET](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core).
 
@@ -90,18 +95,14 @@ Supported processor architectures are:
 - AMD64 (x86-64)
 - ARM64 ([Experimental](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/versioning-and-stability.md))
 
-> [!NOTE]
-> ARM64 build does not support CentOS based images.
-
 CI tests run against the following operating systems:
 
 - [Alpine x64](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docker/alpine.dockerfile)
 - [Alpine ARM64](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docker/alpine.dockerfile)
 - [Debian x64](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docker/debian.dockerfile)
 - [Debian ARM64](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docker/debian-arm64.dockerfile)
-- [CentOS 7 x64](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docker/centos-build.dockerfile)
-  (.NET 8 is not supported)
-- [macOS Big Sur 11 x64](https://github.com/actions/runner-images/blob/main/images/macos/macos-11-Readme.md)
+- [CentOS Stream 9 x64](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/blob/main/docker/centos-stream9.dockerfile)
+- [macOS Ventura 13 x64](https://github.com/actions/runner-images/blob/main/images/macos/macos-13-Readme.md)
 - [Microsoft Windows Server 2022 x64](https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md)
 - [Ubuntu 20.04 LTS x64](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2004-Readme.md)
 - Ubuntu 22.04 LTS ARM64
@@ -121,13 +122,20 @@ automatically generated in .NET 7+ whenever the `dotnet publish` or `dotnet buil
 command is used with a Runtime Identifier (RID) parameter, for example when `-r`
 or `--runtime` is used when running the command.
 
-### Install
+### Install using NuGet packages
 
-Download and extract the appropriate binaries from
+The NuGet packages are the recommended way to deploy automatic instrumentation,
+but they can't be used in all cases. To install using the NuGet packages,
+see [Using the OpenTelemetry.AutoInstrumentation NuGet packages](./using-the-nuget-packages.md).
+See [Limitations](./using-the-nuget-packages.md#limitations) for incompatible scenarios.
+
+### Install manually
+
+To install the automatic instrumentation manually, download and extract the appropriate binaries from
 [the latest release](https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/latest).
 
 > [!NOTE]
-> The path where you put the binaries is referenced as `$INSTALL_DIR`
+> The path where you put the binaries is referenced as `$INSTALL_DIR`.
 
 ### Instrument a .NET application
 
@@ -157,6 +165,9 @@ When running your application, make sure to:
 > [!NOTE]
 > Some settings can be omitted on .NET. For more information, see [config.md](config.md#net-clr-profiler).
 
+> [!IMPORTANT]
+> Starting in .NET 8, the environment variable `DOTNET_EnableDiagnostics=0` disables all diagnostics, including the CLR Profiler facility which is needed to launch the instrumentation, if not using .NET Startup hooks. Ensure that `DOTNET_EnableDiagnostics=1`, or if you'd like to limit diagnostics only to the CLR Profiler, you may set both `DOTNET_EnableDiagnostics=1` and `DOTNET_EnableDiagnostics_Profiler=1` while setting other diagnostics features to 0. See this [issue](https://github.com/dotnet/runtime/issues/96227#issuecomment-1865326080) for more guidance.
+
 ### Shell scripts
 
 You can install OpenTelemetry .NET Automatic Instrumentation
@@ -169,7 +180,7 @@ Example usage:
 
 ```sh
 # Download the bash script
-curl -sSfL https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v1.4.0/otel-dotnet-auto-install.sh -O
+curl -sSfL https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v1.10.0-beta.1/otel-dotnet-auto-install.sh -O
 
 # Install core files
 sh ./otel-dotnet-auto-install.sh
@@ -184,16 +195,31 @@ chmod +x $HOME/.otel-dotnet-auto/instrument.sh
 OTEL_SERVICE_NAME=myapp OTEL_RESOURCE_ATTRIBUTES=deployment.environment=staging,service.version=1.0.0 ./MyNetApp
 ```
 
+NOTE: for air-gapped environments you can provide either the installation archive directly with:
+
+```sh
+LOCAL_PATH=<PATH_TO_ARCHIVE> sh ./otel-dotnet-auto-install.sh
+```
+or the folder with the archives, this has the added benefit that the install script will determine
+the correct archive to choose.
+
+```sh
+DOWNLOAD_DIR=<PATH_TO_FOLDER_WITH_ARCHIVES> sh ./otel-dotnet-auto-install.sh
+```
+
+
 `otel-dotnet-auto-install.sh` script
 uses environment variables as parameters:
 
-| Parameter               | Description                                                      | Required | Default value             |
-|-------------------------|------------------------------------------------------------------|----------|---------------------------|
-| `OTEL_DOTNET_AUTO_HOME` | Location where binaries are to be installed                      | No       | `$HOME/.otel-dotnet-auto` |
-| `OS_TYPE`               | Possible values: `linux-glibc`, `linux-musl`, `macos`, `windows` | No       | *Calculated*              |
-| `ARCHITECTURE`          | Possible values for Linux: `x64`, `arm64`                        | No       | *Calculated*              |
-| `TMPDIR`                | Temporary directory used when downloading the files              | No       | `$(mktemp -d)`            |
-| `VERSION`               | Version to download                                              | No       | `1.4.0`                   |
+| Parameter               | Description                                                                     | Required | Default value               |
+|-------------------------|---------------------------------------------------------------------------------|----------|-----------------------------|
+| `OTEL_DOTNET_AUTO_HOME` | Location where binaries are to be installed                                     | No       | `$HOME/.otel-dotnet-auto`   |
+| `OS_TYPE`               | Possible values: `linux-glibc`, `linux-musl`, `macos`, `windows`                | No       | *Calculated*                |
+| `ARCHITECTURE`          | Possible values for Linux: `x64`, `arm64`                                       | No       | *Calculated*                |
+| `TMPDIR`                | (deprecated) prefer `DOWNLOAD_DIR`                                              | No       | `$(mktemp -d)`              |
+| `DOWNLOAD_DIR`          | Folder to download the archive to. Will use local archive if it already exists  | No       | `$TMPDIR` or `$(mktemp -d)` |
+| `LOCAL_PATH`            | Full path the archive to use for installation. (ideal for air-gapped scenarios) | No       | *Calculated*                |
+| `VERSION`               | Version to download                                                             | No       | `1.10.0-beta.1`                     |
 
 [instrument.sh](../instrument.sh) script
 uses environment variables as parameters:
@@ -213,7 +239,7 @@ Example usage (run as administrator):
 
 ```powershell
 # Download the module
-$module_url = "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v1.4.0/OpenTelemetry.DotNet.Auto.psm1"
+$module_url = "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v1.10.0-beta.1/OpenTelemetry.DotNet.Auto.psm1"
 $download_path = Join-Path $env:temp "OpenTelemetry.DotNet.Auto.psm1"
 Invoke-WebRequest -Uri $module_url -OutFile $download_path -UseBasicParsing
 
@@ -303,7 +329,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Community Roles
 
-[Maintainers](https://github.com/open-telemetry/community/blob/main/community-membership.md#maintainer)
+[Maintainers](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#membership-levels)
 ([@open-telemetry/dotnet-instrumentation-maintainers](https://github.com/orgs/open-telemetry/teams/dotnet-instrumentation-maintainers)):
 
 - [Chris Ventura](https://github.com/nrcventura), New Relic
@@ -313,14 +339,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [Robert Paj&#x105;k](https://github.com/pellared), Splunk
 - [Zach Montoya](https://github.com/zacharycmontoya), Datadog
 
-[Approvers](https://github.com/open-telemetry/community/blob/main/community-membership.md#approver)
+[Approvers](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#membership-levels)
 ([@open-telemetry/dotnet-instrumentation-approvers](https://github.com/orgs/open-telemetry/teams/dotnet-instrumentation-approvers)):
 
 - [Mateusz &#x141;ach](https://github.com/lachmatt), Splunk
 - [Rasmus Kuusmann](https://github.com/RassK), Splunk
 
 [Emeritus
-Maintainer/Approver/Triager](https://github.com/open-telemetry/community/blob/main/community-membership.md#emeritus-maintainerapprovertriager):
+Maintainer/Approver/Triager](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#membership-levels):
 
 - [Colin Higgins](https://github.com/colin-higgins)
 - [Greg Paperin](https://github.com/macrogreg)
@@ -329,4 +355,4 @@ Maintainer/Approver/Triager](https://github.com/open-telemetry/community/blob/ma
 - [Mike Goldsmith](https://github.com/MikeGoldsmith)
 - [Tony Redondo](https://github.com/tonyredondo)
 
-Learn more about roles in the [community repository](https://github.com/open-telemetry/community/blob/main/community-membership.md).
+Learn more about roles in the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md).

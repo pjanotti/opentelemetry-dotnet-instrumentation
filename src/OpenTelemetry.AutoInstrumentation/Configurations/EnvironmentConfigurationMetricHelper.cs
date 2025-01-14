@@ -29,10 +29,22 @@ internal static class EnvironmentConfigurationMetricHelper
                 MetricInstrumentation.HttpClient => Wrappers.AddHttpClientInstrumentation(builder, lazyInstrumentationLoader),
                 MetricInstrumentation.NetRuntime => Wrappers.AddRuntimeInstrumentation(builder, pluginManager),
                 MetricInstrumentation.Process => Wrappers.AddProcessInstrumentation(builder),
-                MetricInstrumentation.NServiceBus => builder.AddMeter("NServiceBus.Core"),
-#if NET6_0_OR_GREATER
-                MetricInstrumentation.AspNetCore => Wrappers.AddAspNetCoreInstrumentation(builder, lazyInstrumentationLoader),
+                MetricInstrumentation.NServiceBus => builder
+#if NET
+                    .AddMeter("NServiceBus.Core.Pipeline.Incoming") // NServiceBus 9.1.0+
 #endif
+                    .AddMeter("NServiceBus.Core"), // NServiceBus [8,0.0, 9.1.0)
+
+#if NET
+                MetricInstrumentation.AspNetCore => builder
+                    .AddMeter("Microsoft.AspNetCore.Hosting")
+                    .AddMeter("Microsoft.AspNetCore.Server.Kestrel")
+                    .AddMeter("Microsoft.AspNetCore.Http.Connections")
+                    .AddMeter("Microsoft.AspNetCore.Routing")
+                    .AddMeter("Microsoft.AspNetCore.Diagnostics")
+                    .AddMeter("Microsoft.AspNetCore.RateLimiting"),
+#endif
+                MetricInstrumentation.SqlClient => Wrappers.AddSqlClientInstrumentation(builder, lazyInstrumentationLoader, pluginManager),
                 _ => null,
             };
         }
@@ -48,18 +60,18 @@ internal static class EnvironmentConfigurationMetricHelper
 
     private static MeterProviderBuilder SetExporter(this MeterProviderBuilder builder, MetricSettings settings, PluginManager pluginManager)
     {
-        if (settings.ConsoleExporterEnabled)
+        foreach (var metricExporter in settings.MetricExporters)
         {
-            Wrappers.AddConsoleExporter(builder, pluginManager);
+            builder = metricExporter switch
+            {
+                MetricsExporter.Prometheus => Wrappers.AddPrometheusHttpListener(builder, pluginManager),
+                MetricsExporter.Otlp => Wrappers.AddOtlpExporter(builder, settings, pluginManager),
+                MetricsExporter.Console => Wrappers.AddConsoleExporter(builder, pluginManager),
+                _ => throw new ArgumentOutOfRangeException($"Metrics exporter '{metricExporter}' is incorrect")
+            };
         }
 
-        return settings.MetricExporter switch
-        {
-            MetricsExporter.Prometheus => Wrappers.AddPrometheusHttpListener(builder, pluginManager),
-            MetricsExporter.Otlp => Wrappers.AddOtlpExporter(builder, settings, pluginManager),
-            MetricsExporter.None => builder,
-            _ => throw new ArgumentOutOfRangeException($"Metrics exporter '{settings.MetricExporter}' is incorrect")
-        };
+        return builder;
     }
 
     /// <summary>
@@ -78,42 +90,18 @@ internal static class EnvironmentConfigurationMetricHelper
         }
 #endif
 
-#if NET6_0_OR_GREATER
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static MeterProviderBuilder AddAspNetCoreInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader)
-        {
-            if (Environment.Version.Major >= 8)
-            {
-                // AspNetCore has build in support for metrics in .NET8. Executing OpenTelemetry.Instrumentation.AspNetCore in this case leads to duplicated metrics.
-                return builder
-                    .AddMeter("Microsoft.AspNetCore.Hosting")
-                    .AddMeter("Microsoft.AspNetCore.Server.Kestrel")
-                    .AddMeter("Microsoft.AspNetCore.Http.Connections")
-                    .AddMeter("Microsoft.AspNetCore.Routing")
-                    .AddMeter("Microsoft.AspNetCore.Diagnostics")
-                    .AddMeter("Microsoft.AspNetCore.RateLimiting");
-            }
-
-            DelayedInitialization.Metrics.AddAspNetCore(lazyInstrumentationLoader);
-            return builder.AddMeter("OpenTelemetry.Instrumentation.AspNetCore");
-        }
-#endif
-
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static MeterProviderBuilder AddHttpClientInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader)
         {
-#if NET6_0_OR_GREATER
-            if (Environment.Version.Major >= 8)
-            {
-                // HTTP has build in support for metrics in .NET8. Executing OpenTelemetry.Instrumentation.Http in this case leads to duplicated metrics.
-                return builder
-                    .AddMeter("System.Net.Http")
-                    .AddMeter("System.Net.NameResolution");
-            }
-#endif
-
+#if NET
+            // HTTP has build in support for metrics in .NET8. Executing OpenTelemetry.Instrumentation.Http in this case leads to duplicated metrics.
+            return builder
+                .AddMeter("System.Net.Http")
+                .AddMeter("System.Net.NameResolution");
+#else
             DelayedInitialization.Metrics.AddHttpClient(lazyInstrumentationLoader);
             return builder.AddMeter("OpenTelemetry.Instrumentation.Http");
+#endif
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -126,6 +114,13 @@ internal static class EnvironmentConfigurationMetricHelper
         public static MeterProviderBuilder AddProcessInstrumentation(MeterProviderBuilder builder)
         {
             return builder.AddProcessInstrumentation();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static MeterProviderBuilder AddSqlClientInstrumentation(MeterProviderBuilder builder, LazyInstrumentationLoader lazyInstrumentationLoader, PluginManager pluginManager)
+        {
+            DelayedInitialization.Metrics.AddSqlClient(lazyInstrumentationLoader, pluginManager);
+            return builder.AddMeter("OpenTelemetry.Instrumentation.SqlClient");
         }
 
         // Exporters
@@ -153,10 +148,8 @@ internal static class EnvironmentConfigurationMetricHelper
         {
             return builder.AddOtlpExporter((options, metricReaderOptions) =>
             {
-                if (settings.OtlpExportProtocol.HasValue)
-                {
-                    options.Protocol = settings.OtlpExportProtocol.Value;
-                }
+                // Copy Auto settings to SDK settings
+                settings.OtlpSettings?.CopyTo(options);
 
                 pluginManager.ConfigureMetricsOptions(options);
                 pluginManager.ConfigureMetricsOptions(metricReaderOptions);

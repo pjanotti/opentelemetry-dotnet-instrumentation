@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+using OpenTelemetry.AutoInstrumentation.Configurations.Otlp;
 using OpenTelemetry.AutoInstrumentation.Logging;
 
 namespace OpenTelemetry.AutoInstrumentation.Configurations;
@@ -18,14 +19,9 @@ internal class MetricSettings : Settings
     public bool MetricsEnabled { get; private set; }
 
     /// <summary>
-    /// Gets the metrics exporter.
+    /// Gets the list of enabled metrics exporters.
     /// </summary>
-    public MetricsExporter MetricExporter { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether the console exporter is enabled.
-    /// </summary>
-    public bool ConsoleExporterEnabled { get; private set; }
+    public IReadOnlyList<MetricsExporter> MetricExporters { get; private set; } = new List<MetricsExporter>();
 
     /// <summary>
     /// Gets the list of enabled meters.
@@ -37,10 +33,18 @@ internal class MetricSettings : Settings
     /// </summary>
     public IList<string> Meters { get; } = new List<string>();
 
+    /// <summary>
+    /// Gets metrics OTLP Settings.
+    /// </summary>
+    public OtlpSettings? OtlpSettings { get; private set; }
+
     protected override void OnLoad(Configuration configuration)
     {
-        MetricExporter = ParseMetricExporter(configuration);
-        ConsoleExporterEnabled = configuration.GetBool(ConfigurationKeys.Metrics.ConsoleExporterEnabled) ?? false;
+        MetricExporters = ParseMetricExporter(configuration);
+        if (MetricExporters.Contains(MetricsExporter.Otlp))
+        {
+            OtlpSettings = new OtlpSettings(OtlpSignalType.Metrics, configuration);
+        }
 
         var instrumentationEnabledByDefault =
             configuration.GetBool(ConfigurationKeys.Metrics.MetricsInstrumentationEnabled) ??
@@ -62,32 +66,63 @@ internal class MetricSettings : Settings
         MetricsEnabled = configuration.GetBool(ConfigurationKeys.Metrics.MetricsEnabled) ?? true;
     }
 
-    private static MetricsExporter ParseMetricExporter(Configuration configuration)
+    private static IReadOnlyList<MetricsExporter> ParseMetricExporter(Configuration configuration)
     {
-        var metricsExporterEnvVar = configuration.GetString(ConfigurationKeys.Metrics.Exporter)
-                                    ?? Constants.ConfigurationValues.Exporters.Otlp;
+        var metricsExporterEnvVar = configuration.GetString(ConfigurationKeys.Metrics.Exporter);
+        var exporters = new List<MetricsExporter>();
+        var seenExporters = new HashSet<string>();
 
-        switch (metricsExporterEnvVar)
+        if (string.IsNullOrEmpty(metricsExporterEnvVar))
         {
-            case null:
-            case "":
-            case Constants.ConfigurationValues.Exporters.Otlp:
-                return MetricsExporter.Otlp;
-            case Constants.ConfigurationValues.Exporters.Prometheus:
-                return MetricsExporter.Prometheus;
-            case Constants.ConfigurationValues.None:
-                return MetricsExporter.None;
-            default:
+            exporters.Add(MetricsExporter.Otlp);
+            return exporters;
+        }
+
+        var exporterNames = metricsExporterEnvVar!.Split(Constants.ConfigurationValues.Separator);
+
+        foreach (var exporterName in exporterNames)
+        {
+            if (seenExporters.Contains(exporterName))
+            {
+                var message = $"Duplicate metric exporter '{exporterName}' found.";
                 if (configuration.FailFast)
                 {
-                    var message = "Metric exporter '{metricsExporterEnvVar}' is not supported.";
                     Logger.Error(message);
                     throw new NotSupportedException(message);
                 }
 
-                Logger.Error($"Metric exporter '{metricsExporterEnvVar}' is not supported. Defaulting to '{Constants.ConfigurationValues.Exporters.Otlp}'.");
+                Logger.Warning(message);
+                continue;
+            }
 
-                return MetricsExporter.Otlp;
+            seenExporters.Add(exporterName);
+
+            switch (exporterName)
+            {
+                case Constants.ConfigurationValues.Exporters.Otlp:
+                    exporters.Add(MetricsExporter.Otlp);
+                    break;
+                case Constants.ConfigurationValues.Exporters.Prometheus:
+                    exporters.Add(MetricsExporter.Prometheus);
+                    break;
+                case Constants.ConfigurationValues.Exporters.Console:
+                    exporters.Add(MetricsExporter.Console);
+                    break;
+                case Constants.ConfigurationValues.None:
+                    break;
+                default:
+                    var unsupportedMessage = $"Metric exporter '{exporterName}' is not supported.";
+                    Logger.Error(unsupportedMessage);
+
+                    if (configuration.FailFast)
+                    {
+                        throw new NotSupportedException(unsupportedMessage);
+                    }
+
+                    break;
+            }
         }
+
+        return exporters;
     }
 }

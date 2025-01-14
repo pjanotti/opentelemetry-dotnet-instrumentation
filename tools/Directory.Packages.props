@@ -2,8 +2,10 @@
   <Import Project="..\Directory.Packages.props" />
   <ItemGroup>
     <PackageVersion Include="McMaster.Extensions.CommandLineUtils" Version="4.1.1" />
-    <PackageVersion Include="Microsoft.Build" Version="17.6.3" />
-    <PackageVersion Include="NuGet.ProjectModel" Version="6.9.1" />
-    <PackageVersion Include="System.IO.Abstractions" Version="21.0.2" />
+    <PackageVersion Include="Microsoft.Build" Version="17.12.6" />
+    <PackageVersion Include="NuGet.ProjectModel" Version="6.12.1" />
+    <PackageVersion Include="System.IO.Abstractions" Version="21.2.1" />
+    <PackageVersion Include="Valleysoft.DockerfileModel" Version="1.2.0" />
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 </Project>

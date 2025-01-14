@@ -12,6 +12,18 @@ internal static class Constants
         public const string TelemetryDistroVersionAttributeName = "telemetry.distro.version";
     }
 
+    public static class GrpcSpanAttributes
+    {
+        public const string AttributeGrpcRequestMetadataPrefix = "rpc.grpc.request.metadata";
+        public const string AttributeGrpcResponseMetadataPrefix = "rpc.grpc.response.metadata";
+    }
+
+    public static class HttpSpanAttributes
+    {
+        public const string AttributeHttpRequestHeaderPrefix = "http.request.header";
+        public const string AttributeHttpResponseHeaderPrefix = "http.response.header";
+    }
+
     public static class ConfigurationValues
     {
         public const string None = "none";
@@ -33,6 +45,7 @@ internal static class Constants
             public const string Otlp = "otlp";
             public const string Prometheus = "prometheus";
             public const string Zipkin = "zipkin";
+            public const string Console = "console";
         }
 
         public static class Propagators
@@ -49,6 +62,12 @@ internal static class Constants
             public const string Warning = "warn";
             public const string Information = "info";
             public const string Debug = "debug";
+        }
+
+        public static class Loggers
+        {
+            public const string File = "file";
+            public const string Console = "console";
         }
     }
 

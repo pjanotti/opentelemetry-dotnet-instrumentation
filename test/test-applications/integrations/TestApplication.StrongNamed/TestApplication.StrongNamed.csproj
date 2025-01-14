@@ -1,11 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AddTestStrongNameAssemblyKeyOnNetFramework>true</AddTestStrongNameAssemblyKeyOnNetFramework>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)..\..\..\test-keypair.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
-  
+
   <ItemGroup>
     <ProjectReference Include="..\dependency-libs\TestLibrary.InstrumentationTarget\TestLibrary.InstrumentationTarget.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- System.Private.Uri is indirect reference. Bumping it to mitigate https://github.com/advisories/GHSA-xhfc-gr8f-ffwc -->
+    <PackageReference Include="System.Private.Uri" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#if NET6_0_OR_GREATER
+#if NET
 using FluentAssertions;
 using FluentAssertions.Execution;
 using IntegrationTests.Helpers;
@@ -27,25 +27,19 @@ public class HttpTests : TestHelper
         using var collector = new MockSpansCollector(Output);
         SetExporter(collector);
         Span? clientSpan = null;
-#if NET7_0_OR_GREATER
         collector.Expect("System.Net.Http", span =>
-#else
-        collector.Expect("OpenTelemetry.Instrumentation.Http.HttpClient", span =>
-#endif
         {
             clientSpan = span;
             return true;
         });
+
         Span? serverSpan = null;
-#if NET7_0_OR_GREATER
         collector.Expect("Microsoft.AspNetCore", span =>
-#else
-        collector.Expect("OpenTelemetry.Instrumentation.AspNetCore", span =>
-#endif
         {
             serverSpan = span;
             return true;
         });
+
         Span? manualSpan = null;
         collector.Expect("TestApplication.Http", span =>
         {
@@ -68,12 +62,47 @@ public class HttpTests : TestHelper
     }
 
     [Fact]
+    public void SubmitTracesCapturesHttpHeaders()
+    {
+        using var collector = new MockSpansCollector(Output);
+        SetExporter(collector);
+
+        collector.Expect("System.Net.Http", span =>
+        {
+            return span.Attributes.Any(x => x.Key == "http.request.header.custom-request-test-header1" && x.Value.StringValue == "Test-Value1")
+                   && span.Attributes.Any(x => x.Key == "http.request.header.custom-request-test-header3" && x.Value.StringValue == "Test-Value3")
+                   && span.Attributes.All(x => x.Key != "http.request.header.custom-request-test-header2")
+                   && span.Attributes.Any(x => x.Key == "http.response.header.custom-response-test-header2" && x.Value.StringValue == "Test-Value2")
+                   && span.Attributes.All(x => x.Key != "http.response.header.custom-response-test-header1")
+                   && span.Attributes.All(x => x.Key != "http.response.header.custom-response-test-header3");
+        });
+
+        collector.Expect("Microsoft.AspNetCore", span =>
+        {
+            return span.Attributes.Any(x => x.Key == "http.request.header.custom-request-test-header2" && x.Value.StringValue == "Test-Value2")
+                   && span.Attributes.All(x => x.Key != "http.request.header.custom-request-test-header1")
+                   && span.Attributes.All(x => x.Key != "http.request.header.custom-request-test-header3")
+                   && span.Attributes.Any(x => x.Key == "http.response.header.custom-response-test-header1" && x.Value.StringValue == "Test-Value1")
+                   && span.Attributes.Any(x => x.Key == "http.response.header.custom-response-test-header3" && x.Value.StringValue == "Test-Value3")
+                   && span.Attributes.All(x => x.Key != "http.response.header.custom-response-test-header2");
+        });
+
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_HTTP_INSTRUMENTATION_CAPTURE_REQUEST_HEADERS", "Custom-Request-Test-Header1,Custom-Request-Test-Header3");
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_HTTP_INSTRUMENTATION_CAPTURE_RESPONSE_HEADERS", "Custom-Response-Test-Header2");
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_CAPTURE_REQUEST_HEADERS", "Custom-Request-Test-Header2");
+        SetEnvironmentVariable("OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_CAPTURE_RESPONSE_HEADERS", "Custom-Response-Test-Header1,Custom-Response-Test-Header3");
+
+        RunTestApplication();
+
+        collector.AssertExpectations();
+    }
+
+    [Fact]
     [Trait("Category", "EndToEnd")]
     public void SubmitMetrics()
     {
         using var collector = new MockMetricsCollector(Output);
         SetExporter(collector);
-#if NET8_0_OR_GREATER
         collector.Expect("System.Net.Http");
         collector.Expect("System.Net.NameResolution");
         collector.Expect("Microsoft.AspNetCore.Hosting");
@@ -82,11 +111,7 @@ public class HttpTests : TestHelper
         collector.Expect("Microsoft.AspNetCore.Routing");
         collector.Expect("Microsoft.AspNetCore.Diagnostics");
         collector.Expect("Microsoft.AspNetCore.RateLimiting");
-        collector.ExpectAdditionalEntries(x => x.All(m => m.InstrumentationScopeName != "OpenTelemetry.Instrumentation.AspNetCore" && m.InstrumentationScopeName != "OpenTelemetry.Instrumentation.Http"));
-#else
-        collector.Expect("OpenTelemetry.Instrumentation.AspNetCore");
-        collector.Expect("OpenTelemetry.Instrumentation.Http");
-#endif
+        collector.ExpectAdditionalEntries(x => x.All(m => m.InstrumentationScopeName != "OpenTelemetry.Instrumentation.Http"));
 
         RunTestApplication();
 

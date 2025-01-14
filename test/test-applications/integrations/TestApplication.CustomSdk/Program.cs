@@ -54,6 +54,7 @@ public static class Program
         }
 
         var endpointConfiguration = new EndpointConfiguration("TestApplication.NServiceBus");
+        endpointConfiguration.UseSerialization<XmlSerializer>();
 
         var learningTransport = new LearningTransport { StorageDirectory = Path.GetTempPath() };
         endpointConfiguration.UseTransport(learningTransport);
@@ -73,7 +74,7 @@ public static class Program
 
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(5);
-                await client.GetStringAsync("https://www.bing.com", cancellation.Token);
+                await client.GetStringAsync("https://httpbin.org/get", cancellation.Token);
             }
 
             // The "LONG_RUNNING" environment variable is used by tests that access/receive
@@ -120,7 +121,11 @@ public static class Program
             // lazily-loaded metric instrumentation
             .AddMeter("OpenTelemetry.Instrumentation.*")
             // bytecode metric instrumentation
+#if NET
+            .AddMeter("NServiceBus.Core.Pipeline.Incoming")
+#else
             .AddMeter("NServiceBus.Core")
+#endif
             // custom metric
             .AddMeter("TestApplication.CustomSdk")
             .ConfigureResource(builder =>

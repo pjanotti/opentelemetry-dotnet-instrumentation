@@ -23,7 +23,7 @@ var client = new ElasticsearchClient(settings);
 try
 {
     await client.SearchAsync<TestObject>(s =>
-        s.Index("test-index").From(0).Size(10).Query(q => q.Term(t => t.Id, 1)));
+        s.Index("test-index").From(0).Size(10).Query(q => q.Term(t => t.Field(to => to.Id))));
 }
 catch (UnexpectedTransportException)
 {

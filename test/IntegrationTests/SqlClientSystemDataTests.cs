@@ -3,7 +3,7 @@
 
 #if NETFRAMEWORK
 using IntegrationTests.Helpers;
-using Xunit;
+using OpenTelemetry.AutoInstrumentation.Configurations;
 using Xunit.Abstractions;
 
 namespace IntegrationTests;
@@ -15,7 +15,7 @@ public class SqlClientSystemDataTests : TestHelper
     {
     }
 
-    [IgnoreRunningOnNet481Fact]
+    [Fact]
     [Trait("Category", "EndToEnd")]
     public void SubmitTraces()
     {
@@ -27,17 +27,29 @@ public class SqlClientSystemDataTests : TestHelper
 
         collector.AssertExpectations();
     }
-}
 
-public sealed class IgnoreRunningOnNet481Fact : FactAttribute
-{
-    public IgnoreRunningOnNet481Fact()
+    [Fact]
+    [Trait("Category", "EndToEnd")]
+    public void SubmitMetrics()
     {
-        var netVersion = RuntimeHelper.GetRuntimeVersion();
-        if (netVersion == "4.8.1+")
+        using var collector = new MockMetricsCollector(Output);
+        SetExporter(collector);
+
+        collector.Expect("OpenTelemetry.Instrumentation.SqlClient");
+
+        SetEnvironmentVariable("LONG_RUNNING", "true");
+        SetEnvironmentVariable("OTEL_METRIC_EXPORT_INTERVAL", "100");
+        SetEnvironmentVariable(ConfigurationKeys.Traces.TracesEnabled, bool.FalseString); // make sure that traces instrumentation is not needed
+
+        using var process = StartTestApplication();
+
+        try
         {
-            // https://github.com/open-telemetry/opentelemetry-dotnet/issues/3901
-            Skip = "NET Framework 4.8.1 is skipped due bug.";
+            collector.AssertExpectations();
+        }
+        finally
+        {
+            process?.Kill();
         }
     }
 }

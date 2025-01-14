@@ -2,7 +2,6 @@ using Nuke.Common;
 using Nuke.Common.IO;
 using Serilog;
 using static Nuke.Common.EnvironmentInfo;
-using static Nuke.Common.IO.FileSystemTasks;
 
 partial class Build
 {
@@ -50,6 +49,6 @@ partial class Build
             var dest = TracerHomeDirectory / "osx-x64";
             Log.Information($"Copying '{source}' to '{dest}'");
 
-            CopyFileToDirectory(source, dest, FileExistsPolicy.Overwrite);
+            source.CopyToDirectory(dest, ExistsPolicy.FileOverwrite);
         });
 }

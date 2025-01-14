@@ -1,13 +1,13 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#if NET6_0_OR_GREATER
+#if NET
 
 using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.AspNetCore.Http;
-using OpenTelemetry.Proto.Collector.Profiles.V1;
-using OpenTelemetry.Proto.Profiles.V1;
+using OpenTelemetry.Proto.Collector.Profiles.V1Development;
+using OpenTelemetry.Proto.Profiles.V1Development;
 using Xunit.Abstractions;
 
 namespace IntegrationTests.Helpers;
@@ -19,6 +19,7 @@ public class MockProfilesCollector : IDisposable
 
     private readonly List<Expectation> _expectations = new();
     private readonly BlockingCollection<Collected> _profilesSnapshots = new(10); // bounded to avoid memory leak; contains protobuf type
+    private CollectedExpectation? _collectedExpectation;
 
     public MockProfilesCollector(ITestOutputHelper output)
     {
@@ -41,11 +42,31 @@ public class MockProfilesCollector : IDisposable
         _listener.Dispose();
     }
 
-    public void Expect(Func<ProfilesData, bool>? predicate = null, string? description = null)
+    public void Expect(Func<ExportProfilesServiceRequest, bool>? predicate = null, string? description = null)
     {
         predicate ??= x => true;
 
         _expectations.Add(new Expectation(predicate, description));
+    }
+
+    public void ExpectCollected(Func<ICollection<ExportProfilesServiceRequest>, bool> collectedExpectation, string description)
+    {
+        _collectedExpectation = new(collectedExpectation, description);
+    }
+
+    public void AssertCollected()
+    {
+        if (_collectedExpectation == null)
+        {
+            throw new InvalidOperationException("Expectation for collected profiling snapshot was not set");
+        }
+
+        var collected = _profilesSnapshots.Select(collected => collected.ExportProfilesServiceRequest).ToArray();
+
+        if (!_collectedExpectation.Predicate(collected))
+        {
+            FailCollectedExpectation(_collectedExpectation.Description, collected);
+        }
     }
 
     public void AssertExpectations(TimeSpan? timeout = null)
@@ -70,7 +91,7 @@ public class MockProfilesCollector : IDisposable
                 var found = false;
                 for (var i = missingExpectations.Count - 1; i >= 0; i--)
                 {
-                    if (!missingExpectations[i].Predicate(collectedProfilesDataSnapshot.ProfilesData))
+                    if (!missingExpectations[i].Predicate(collectedProfilesDataSnapshot.ExportProfilesServiceRequest))
                     {
                         continue;
                     }
@@ -133,6 +154,19 @@ public class MockProfilesCollector : IDisposable
         Assert.Fail(message.ToString());
     }
 
+    private static void FailCollectedExpectation(string? collectedExpectationDescription, ExportProfilesServiceRequest[] collectedExportProfilesServiceRequests)
+    {
+        var message = new StringBuilder();
+        message.AppendLine($"Collected profiles expectation failed: {collectedExpectationDescription}");
+        message.AppendLine("Collected profiles:");
+        foreach (var logRecord in collectedExportProfilesServiceRequests)
+        {
+            message.AppendLine($"    \"{logRecord}\"");
+        }
+
+        Assert.Fail(message.ToString());
+    }
+
     private async Task HandleHttpRequests(HttpContext ctx)
     {
         using var bodyStream = await ctx.ReadBodyToMemoryAsync();
@@ -142,17 +176,14 @@ public class MockProfilesCollector : IDisposable
         await ctx.GenerateEmptyProtobufResponseAsync<ExportProfilesServiceResponse>();
     }
 
-    private void HandleProfilesMessage(ExportProfilesServiceRequest metricsMessage)
+    private void HandleProfilesMessage(ExportProfilesServiceRequest profileMessage)
     {
-        foreach (var profilesData in metricsMessage.ProfilesData ?? Enumerable.Empty<ProfilesData>())
+        foreach (var resourceProfile in profileMessage.ResourceProfiles ?? Enumerable.Empty<ResourceProfiles>())
         {
-            foreach (var resourceProfile in profilesData.ResourceProfiles)
-            {
-                ResourceExpector.Collect(resourceProfile.Resource);
-            }
-
-            _profilesSnapshots.Add(new Collected(profilesData));
+            ResourceExpector.Collect(resourceProfile.Resource);
         }
+
+        _profilesSnapshots.Add(new Collected(profileMessage));
     }
 
     private void WriteOutput(string msg)
@@ -163,28 +194,41 @@ public class MockProfilesCollector : IDisposable
 
     public class Collected
     {
-        public Collected(ProfilesData profilesData)
+        public Collected(ExportProfilesServiceRequest exportProfilesServiceRequest)
         {
-            ProfilesData = profilesData;
+            ExportProfilesServiceRequest = exportProfilesServiceRequest;
         }
 
-        public ProfilesData ProfilesData { get; } // protobuf type
+        public ExportProfilesServiceRequest ExportProfilesServiceRequest { get; } // protobuf type
 
         public override string ToString()
         {
-            return $"ProfilesData = {ProfilesData}";
+            return $"ExportProfilesServiceRequest = {ExportProfilesServiceRequest}";
         }
     }
 
     private class Expectation
     {
-        public Expectation(Func<ProfilesData, bool> predicate, string? description)
+        public Expectation(Func<ExportProfilesServiceRequest, bool> predicate, string? description)
         {
             Predicate = predicate;
             Description = description;
         }
 
-        public Func<ProfilesData, bool> Predicate { get; }
+        public Func<ExportProfilesServiceRequest, bool> Predicate { get; }
+
+        public string? Description { get; }
+    }
+
+    private class CollectedExpectation
+    {
+        public CollectedExpectation(Func<ICollection<ExportProfilesServiceRequest>, bool> predicate, string? description)
+        {
+            Predicate = predicate;
+            Description = description;
+        }
+
+        public Func<ICollection<ExportProfilesServiceRequest>, bool> Predicate { get; }
 
         public string? Description { get; }
     }

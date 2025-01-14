@@ -17,37 +17,36 @@ jobs:
             log-dir: "/c/ProgramData/OpenTelemetry .NET AutoInstrumentation/logs"
           - machine: ubuntu-20.04
             log-dir: "/var/log/opentelemetry/dotnet"
-          - machine: macos-11
+          - machine: macos-13
             log-dir: "/var/log/opentelemetry/dotnet"
-          - machine: actuated-arm64-4cpu-8gb
+          - machine: otel-linux-arm64
             log-dir: "/var/log/opentelemetry/dotnet"
     runs-on: ${{ matrix.machine }}
     steps:
 
       - name: ARM64 Runner Info
-        if: ${{ matrix.machine == 'actuated-arm64-4cpu-8gb' }}
+        if: ${{ matrix.machine == 'otel-linux-arm64' }}
         run: cat /etc/os-release
 
       - name: Checkout
-        uses: actions/checkout@v4.1.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # tag: v4.2.2
         with:
           fetch-depth: 0 # fetching all, needed to correctly calculate version
 
       - name: Setup ARM64 Environment Variables
-        if: ${{ matrix.machine == 'actuated-arm64-4cpu-8gb' }}
+        if: ${{ matrix.machine == 'otel-linux-arm64' }}
         run: |
           echo "DOTNET_INSTALL_DIR=~/.dotnet" >> $GITHUB_ENV
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4.0.0
+        uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # tag: v4.2.0
         with:
           dotnet-version: | 
-            6.0.420
-            7.0.407
-            8.0.203
+            8.0.404
+            9.0.101
 
       - name: Check for NuGet packages cache
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # tag: v4.2.0
         id: nuget-cache
         with:
           key: ${{ hashFiles('**/Directory.packages.props', './build/LibraryVersions.g.cs', '**/packages.config' ) }}
@@ -60,13 +59,13 @@ jobs:
 
       - name: Cache NuGet packages
         if: ${{ steps.nuget-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4.0.2
+        uses: actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57 # tag: v4.2.0
         with:
           key: ${{ hashFiles('**/Directory.packages.props', './build/LibraryVersions.g.cs', '**/packages.config' ) }}
           path: ${{ env.NUGET_PACKAGES }}
 
       - name: Setup ARM64 Machine
-        if: ${{ matrix.machine == 'actuated-arm64-4cpu-8gb' }}
+        if: ${{ matrix.machine == 'otel-linux-arm64' }}
         run: |
           sudo apt-get update && \
           sudo apt-get install -y \
@@ -77,18 +76,18 @@ jobs:
       - name: Run BuildWorkflow
         run: ./build.cmd BuildWorkflow --no-restore ${{ steps.nuget-cache.outputs.cache-hit != 'true' }}
 
-      - name: Download native CentOS Artifacts from build job
+      - name: Download native Ubuntu 16.04 Artifacts from build job
         if: ${{ matrix.machine == 'ubuntu-20.04' }}
-        uses: actions/download-artifact@v4.1.4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # tag: v4.1.8
         with:
-          name: bin-centos-native
-          path: bin/ci-artifacts/bin-centos-native
+          name: bin-ubuntu1604-native
+          path: bin/ci-artifacts/bin-ubuntu1604-native
 
-      - name: Replace Ubuntu native code by Centos artifacts
+      - name: Replace Ubuntu native code by Ubuntu 16.04 artifacts
         if: ${{ matrix.machine == 'ubuntu-20.04' }}
         run: |
           rm ./bin/tracer-home/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
-          cp ./bin/ci-artifacts/bin-centos-native/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so ./bin/tracer-home/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
+          cp ./bin/ci-artifacts/bin-ubuntu1604-native/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so ./bin/tracer-home/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
 
       - name: Install MacOS CoreUtils
         if: ${{ runner.os == 'macOS' }}
@@ -102,10 +101,10 @@ jobs:
         shell: bash
         run: |
           set -e
-          dotnet publish -f net8.0 -c Release ./test/test-applications/integrations/TestApplication.Smoke
+          dotnet publish -f net9.0 -c Release ./test/test-applications/integrations/TestApplication.Smoke
           export OTEL_DOTNET_AUTO_HOME="${PWD}/bin/tracer-home"
           . ./instrument.sh
-          ./test/test-applications/integrations/bin/TestApplication.Smoke/Release/net8.0/publish/TestApplication.Smoke
+          ./test/test-applications/integrations/bin/TestApplication.Smoke/Release/net9.0/publish/TestApplication.Smoke
             test "$(ls -A '${{ matrix.log-dir }}' )"
 
       - name: Test the Windows PowerShell module instructions from README.md
@@ -116,25 +115,25 @@ jobs:
           Import-Module "${PWD}/bin/installation-scripts/OpenTelemetry.DotNet.Auto.psm1"
           [System.Environment]::SetEnvironmentVariable("OTEL_DOTNET_AUTO_INSTALL_DIR", "${PWD}/bin/tracer-home", [System.EnvironmentVariableTarget]::Machine)
           Register-OpenTelemetryForCurrentSession -OTelServiceName "MyServiceDisplayName"
-          ./test/test-applications/integrations/bin/TestApplication.Smoke/Release/net8.0/TestApplication.Smoke.exe
+          ./test/test-applications/integrations/bin/TestApplication.Smoke/Release/net9.0/TestApplication.Smoke.exe
           if (-not $?) { throw "dotnet help returned exit code: $LASTEXITCODE" }
           if (-not (Test-Path $log_path)) { throw "Log file does not exist. Instrumentation test failed." }
           Remove-Item $log_path
           Unregister-OpenTelemetryForCurrentSession
-          ./test/test-applications/integrations/bin/TestApplication.Smoke/Release/net8.0/TestApplication.Smoke.exe
+          ./test/test-applications/integrations/bin/TestApplication.Smoke/Release/net9.0/TestApplication.Smoke.exe
           if (-not $?) { throw "dotnet help returned exit code: $LASTEXITCODE" }
           if (Test-Path $log_path) { throw "Log file exists. Instrumentation unregister failed." }
 
       - name: Upload binaries
         if: always()
-        uses: actions/upload-artifact@v4.3.1
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # tag: v4.6.0
         with:
           name: bin-${{ matrix.machine }}
           path: bin/tracer-home
 
       - name: Upload installation scripts
         if: always()
-        uses: actions/upload-artifact@v4.3.1
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # tag: v4.6.0
         with:
           name: installation-scripts-${{ matrix.machine }}
           path: bin/installation-scripts
